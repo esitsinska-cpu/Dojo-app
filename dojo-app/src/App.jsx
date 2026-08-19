@@ -264,6 +264,7 @@ function SOSOverlay({ onClose }) {
     <div style={{
       position: "fixed", inset: 0, background: "rgba(35,40,35,0.4)", zIndex: 1000,
       display: "flex", flexDirection: "column", padding: "28px 22px", overflowY: "auto",
+      paddingTop: "calc(env(safe-area-inset-top) + 28px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 28px)",
       WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
     }}>
       <div style={{ background: T.bg, borderRadius: 22, padding: "26px 22px", flex: 1, animation: "dojoRise 320ms cubic-bezier(0.22,1,0.36,1) both" }}>
@@ -311,7 +312,7 @@ function SOSOverlay({ onClose }) {
 function AvertissementSheet({ onDismiss }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(35,40,35,0.4)", zIndex: 900, display: "flex", alignItems: "flex-end", WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)" }}>
-      <div style={{ width: "100%", background: T.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "26px 22px 30px", boxShadow: "0 -12px 40px rgba(35,40,35,0.12)", animation: "dojoSheetUp 340ms cubic-bezier(0.22,1,0.36,1) both" }}>
+      <div style={{ width: "100%", background: T.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "26px 22px calc(env(safe-area-inset-bottom) + 30px)", boxShadow: "0 -12px 40px rgba(35,40,35,0.12)", animation: "dojoSheetUp 340ms cubic-bezier(0.22,1,0.36,1) both" }}>
         <div style={{ width: 36, height: 4, background: "#E2E6E3", borderRadius: 2, margin: "0 auto 20px" }} />
         <h3 style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 19, color: T.ink, marginBottom: 10 }}>Avant de commencer</h3>
         <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.muted, lineHeight: 1.55, marginBottom: 18 }}>
@@ -1669,10 +1670,6 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
         </button>
       </Stagger>
 
-      <button onClick={() => addScore(5)} className="dojo-press-bouncy" style={{ marginTop: 8, background: "none", border: "none", color: T.muted, fontFamily: "'IBM Plex Mono'", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>
-        (démo interne : +5 points d'entraînement)
-      </button>
-
       <button onClick={onOpenAbout} className="dojo-press" style={{ display: "block", marginTop: 22, background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 12, cursor: "pointer" }}>
         À propos
       </button>
@@ -1684,7 +1681,7 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
 function SplashScreen({ onStart }) {
   return (
     <div style={{
-      position: "relative", minHeight: "100vh", overflow: "hidden",
+      position: "relative", minHeight: "100dvh", overflow: "hidden",
       display: "flex", flexDirection: "column", justifyContent: "space-between",
     }}>
       {/* Layered animated water — several caustic light blobs drifting at different speeds */}
@@ -1733,7 +1730,7 @@ export default function DojoApp() {
   if (!loaded || !incidentsLoaded || !srsLoaded) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, position: "relative" }}>
+    <div style={{ minHeight: "100dvh", background: T.bg, position: "relative" }}>
       <style>{`
         @import url('${FONTS_LINK}');
 
@@ -1834,7 +1831,10 @@ export default function DojoApp() {
         }
       `}</style>
 
-      <div style={{ maxWidth: 430, margin: "0 auto", minHeight: "100vh", background: T.bg, position: "relative" }}>
+      <div style={{
+        maxWidth: 430, margin: "0 auto", minHeight: "100dvh", background: T.bg, position: "relative",
+        paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)",
+      }}>
         {screen === "splash" && (
           <div key="splash" className="dojo-screen">
             <SplashScreen onStart={() => setScreen("home")} />
@@ -1921,7 +1921,7 @@ export default function DojoApp() {
             aria-label="Point de sécurité"
             className="dojo-press"
             style={{
-              position: "fixed", top: 18, right: "calc(50% - 195px)", width: 40, height: 40,
+              position: "fixed", top: "calc(env(safe-area-inset-top) + 18px)", right: "calc(50% - 195px)", width: 40, height: 40,
               borderRadius: "50%", border: "none", background: T.alertSoft,
               color: T.alert, fontFamily: "'Atkinson Hyperlegible'", fontWeight: 700, fontSize: 14, cursor: "pointer", zIndex: 500,
               boxShadow: "0 2px 8px rgba(194,67,54,0.18)",
