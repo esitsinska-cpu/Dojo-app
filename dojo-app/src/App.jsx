@@ -1737,6 +1737,10 @@ export default function DojoApp() {
       <style>{`
         @import url('${FONTS_LINK}');
 
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+
         @keyframes dojoRise {
           from { opacity: 0; transform: translateY(14px) scale(0.98); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
