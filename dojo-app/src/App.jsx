@@ -1677,39 +1677,36 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
   );
 }
 
-/* ---------------- Splash / welcome screen — animated water ---------------- */
+/* ---------------- Splash / welcome screen — fond clair minimal ---------------- */
 function SplashScreen({ onStart }) {
   return (
     <div style={{
-      position: "relative", minHeight: "100dvh", overflow: "hidden",
-      display: "flex", flexDirection: "column", justifyContent: "space-between",
+      position: "relative", minHeight: "100dvh", background: T.bg,
+      display: "flex", flexDirection: "column", justifyContent: "center",
+      padding: "40px 28px",
     }}>
-      {/* Layered animated water — several caustic light blobs drifting at different speeds */}
-      <div className="splash-water">
-        <div className="water-layer water-layer-1" />
-        <div className="water-layer water-layer-2" />
-        <div className="water-layer water-layer-3" />
-        <div className="water-shimmer" />
-      </div>
-
-      <div style={{ position: "relative", zIndex: 2, padding: "64px 28px 0", textAlign: "center" }}>
-        <div style={{ fontFamily: "'Montserrat'", fontSize: 12, letterSpacing: 3, color: "rgba(255,255,255,0.9)", textTransform: "uppercase", fontWeight: 500 }}>Le dojo de</div>
-        <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 40, letterSpacing: 1.5, color: "#fff", margin: "10px 0 0", textShadow: "0 4px 24px rgba(10,50,45,0.35)" }}>
-          L'AÏKIDO<br />PSYCHOLOGIQUE
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontFamily: "'Montserrat'", fontSize: 12, letterSpacing: 3, color: T.teal, textTransform: "uppercase", fontWeight: 600 }}>Le dojo de</div>
+        <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 36, letterSpacing: 0.5, color: T.ink, margin: "10px 0 40px", lineHeight: 1.15 }}>
+          L'Aïkido<br />Psychologique
         </h1>
-      </div>
 
-      <div style={{ position: "relative", zIndex: 2, padding: "0 26px 46px" }}>
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 14.5, color: "rgba(255,255,255,0.92)", textAlign: "center", lineHeight: 1.55, marginBottom: 22, maxWidth: 340, marginLeft: "auto", marginRight: "auto" }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%", margin: "0 auto 28px",
+          background: `linear-gradient(135deg, ${T.teal}, ${T.tealSoft})`,
+          boxShadow: `0 8px 20px -6px ${T.teal}88`,
+        }} />
+
+        <p style={{ fontFamily: "'Montserrat'", fontSize: 14, color: T.muted, lineHeight: 1.55, marginBottom: 26, maxWidth: 300, marginLeft: "auto", marginRight: "auto" }}>
           Un entraînement, pas une théorie de plus. Les scripts du livre, prêts à devenir des réflexes.
         </p>
         <button
           onClick={onStart}
           className="dojo-press-bouncy"
           style={{
-            width: "100%", padding: "17px 0", borderRadius: 18, border: "none",
-            background: "#fff", color: T.teal, fontFamily: "'Montserrat'", fontWeight: 700, fontSize: 16,
-            cursor: "pointer", boxShadow: "0 10px 30px rgba(10,50,45,0.28)",
+            width: "100%", padding: "16px 0", borderRadius: 16, border: "none",
+            background: T.teal, color: "#fff", fontFamily: "'Montserrat'", fontWeight: 700, fontSize: 15.5,
+            cursor: "pointer", boxShadow: `0 8px 20px -6px ${T.teal}88`,
           }}
         >Commencer</button>
       </div>
@@ -1750,60 +1747,6 @@ export default function DojoApp() {
           from { opacity: 0; transform: translateY(16px) scale(0.94); }
           60%  { opacity: 1; transform: translateY(-2px) scale(1.015); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        /* ---- Real water motion for the splash screen ---- */
-        .splash-water {
-          position: absolute; inset: 0; overflow: hidden;
-          background: linear-gradient(165deg, ${T.teal}, #0E5F58 55%, #0A4842);
-        }
-        .water-layer {
-          position: absolute; inset: -20%;
-        }
-        .water-layer-1 {
-          background:
-            radial-gradient(circle at 25% 30%, rgba(255,255,255,0.32) 0%, transparent 22%),
-            radial-gradient(circle at 60% 20%, rgba(255,255,255,0.20) 0%, transparent 16%),
-            radial-gradient(circle at 80% 55%, rgba(255,255,255,0.24) 0%, transparent 18%);
-          animation: waterDrift1 11s ease-in-out infinite;
-        }
-        .water-layer-2 {
-          background:
-            radial-gradient(circle at 40% 70%, ${T.tealSoft}55 0%, transparent 26%),
-            radial-gradient(circle at 15% 55%, rgba(255,255,255,0.18) 0%, transparent 20%),
-            radial-gradient(circle at 70% 85%, ${T.tealSoft}44 0%, transparent 24%);
-          animation: waterDrift2 15s ease-in-out infinite;
-        }
-        .water-layer-3 {
-          background:
-            radial-gradient(circle at 50% 10%, rgba(255,255,255,0.16) 0%, transparent 20%),
-            radial-gradient(circle at 85% 30%, rgba(255,255,255,0.14) 0%, transparent 16%);
-          animation: waterDrift3 8.5s ease-in-out infinite;
-        }
-        .water-shimmer {
-          position: absolute; inset: 0;
-          background: repeating-linear-gradient(115deg, transparent 0 22px, rgba(255,255,255,0.05) 22px 24px);
-          animation: shimmerSlide 6s linear infinite;
-          opacity: 0.6;
-        }
-        @keyframes waterDrift1 {
-          0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-          50%      { transform: translate(-4%, 3%) scale(1.08) rotate(4deg); }
-        }
-        @keyframes waterDrift2 {
-          0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-          50%      { transform: translate(5%, -4%) scale(1.1) rotate(-5deg); }
-        }
-        @keyframes waterDrift3 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50%      { transform: translate(-3%, -3%) scale(1.05); }
-        }
-        @keyframes shimmerSlide {
-          from { transform: translateX(0); }
-          to   { transform: translateX(24px); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .water-layer, .water-shimmer { animation: none !important; }
         }
 
         .dojo-screen {
