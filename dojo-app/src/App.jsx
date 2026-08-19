@@ -264,7 +264,7 @@ function SOSOverlay({ onClose }) {
     <div style={{
       position: "fixed", inset: 0, background: "rgba(35,40,35,0.4)", zIndex: 1000,
       display: "flex", flexDirection: "column", padding: "28px 22px", overflowY: "auto",
-      backdropFilter: "blur(2px)",
+      WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
     }}>
       <div style={{ background: T.bg, borderRadius: 22, padding: "26px 22px", flex: 1, animation: "dojoRise 320ms cubic-bezier(0.22,1,0.36,1) both" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
@@ -310,7 +310,7 @@ function SOSOverlay({ onClose }) {
 /* ---------------- Avertissement sheet (first launch) ---------------- */
 function AvertissementSheet({ onDismiss }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(35,40,35,0.4)", zIndex: 900, display: "flex", alignItems: "flex-end", backdropFilter: "blur(2px)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(35,40,35,0.4)", zIndex: 900, display: "flex", alignItems: "flex-end", WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)" }}>
       <div style={{ width: "100%", background: T.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "26px 22px 30px", boxShadow: "0 -12px 40px rgba(35,40,35,0.12)", animation: "dojoSheetUp 340ms cubic-bezier(0.22,1,0.36,1) both" }}>
         <div style={{ width: 36, height: 4, background: "#E2E6E3", borderRadius: 2, margin: "0 auto 20px" }} />
         <h3 style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 19, color: T.ink, marginBottom: 10 }}>Avant de commencer</h3>
@@ -393,7 +393,7 @@ function GroundingScreen({ onBack, onComplete }) {
 
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", padding: "20px 22px 30px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Outil zéro · chapitre 5</span>
       <h2 style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Ancrage avant de répondre</h2>
@@ -501,7 +501,7 @@ function JournalScreen({ onBack, incidents, addIncident, removeIncident }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Journal privé</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 25, color: T.ink, margin: "6px 0 6px" }}>Journal d'incidents</h1>
@@ -658,7 +658,7 @@ function MirrorTestScreen({ onBack }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Chapitre 2</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Le test des 6 miroirs</h1>
@@ -836,7 +836,7 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
   if (mode === null) {
     return (
       <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Chapitres 8-10</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 20px" }}>Quiz par famille</h1>
 
@@ -862,7 +862,7 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
   if (done) {
     return (
       <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Résultat</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 26, color: T.ink, margin: "8px 0 18px" }}>{score} / {questions.length}</h1>
         <div style={{ background: T.card, borderRadius: 18, padding: 20, marginBottom: 18, boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
@@ -881,7 +881,7 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{FAMILY_LABELS[q.family]}</span>
@@ -970,7 +970,7 @@ function FourFTestScreen({ onBack }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Chapitre 1</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Le test des 4F</h1>
@@ -1153,7 +1153,7 @@ function SimulatorScreen({ onBack }) {
   if (!s) {
     return (
       <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Simulateur</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Construire sa réponse</h1>
         <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 20 }}>
@@ -1180,7 +1180,7 @@ function SimulatorScreen({ onBack }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px", display: "flex", flexDirection: "column" }}>
-      <button onClick={() => setScenarioIdx(null)} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de scène</button>
+      <button onClick={() => setScenarioIdx(null)} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de scène</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 1.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{s.family}</span>
       <h2 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 21, color: T.ink, margin: "4px 0 16px" }}>{s.title}</h2>
@@ -1275,7 +1275,7 @@ function ContextScreen({ onBack, context, setContext }) {
   if (!context) {
     return (
       <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Partie 5</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Dans quel contexte ?</h1>
         <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 20 }}>
@@ -1302,7 +1302,7 @@ function ContextScreen({ onBack, context, setContext }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={() => setContext(null)} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de contexte</button>
+      <button onClick={() => setContext(null)} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de contexte</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{ctxMeta.chapter}</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 23, color: T.ink, margin: "6px 0 18px" }}>{ctxMeta.label}</h1>
@@ -1383,7 +1383,7 @@ function DiagramsScreen({ onBack }) {
 
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Diagrammes</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 23, color: T.ink, margin: "6px 0 16px" }}>Toucher pour explorer</h1>
@@ -1462,7 +1462,7 @@ function DiagramsScreen({ onBack }) {
 function AboutScreen({ onBack, onShowAvertissement }) {
   return (
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ alignSelf: "flex-start", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
+      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Le dojo</span>
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 23, color: T.ink, margin: "6px 0 20px" }}>À propos</h1>
@@ -1537,6 +1537,7 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
       {/* Ancrage — signature CTA */}
       <Stagger index={2}>
         <button
+          onClick={onOpenGrounding}
           className="dojo-press-bouncy"
           style={{
             width: "100%", textAlign: "left", background: `linear-gradient(135deg, ${T.cardTint}, #FFFFFF)`,
@@ -1756,26 +1757,26 @@ export default function DojoApp() {
           background: linear-gradient(165deg, ${T.teal}, #0E5F58 55%, #0A4842);
         }
         .water-layer {
-          position: absolute; inset: -20%; opacity: 0.55; mix-blend-mode: screen;
+          position: absolute; inset: -20%;
         }
         .water-layer-1 {
           background:
-            radial-gradient(circle at 25% 30%, rgba(255,255,255,0.55) 0%, transparent 22%),
-            radial-gradient(circle at 60% 20%, rgba(255,255,255,0.35) 0%, transparent 16%),
-            radial-gradient(circle at 80% 55%, rgba(255,255,255,0.4) 0%, transparent 18%);
+            radial-gradient(circle at 25% 30%, rgba(255,255,255,0.32) 0%, transparent 22%),
+            radial-gradient(circle at 60% 20%, rgba(255,255,255,0.20) 0%, transparent 16%),
+            radial-gradient(circle at 80% 55%, rgba(255,255,255,0.24) 0%, transparent 18%);
           animation: waterDrift1 11s ease-in-out infinite;
         }
         .water-layer-2 {
           background:
-            radial-gradient(circle at 40% 70%, ${T.tealSoft}99 0%, transparent 26%),
-            radial-gradient(circle at 15% 55%, rgba(255,255,255,0.3) 0%, transparent 20%),
-            radial-gradient(circle at 70% 85%, ${T.tealSoft}66 0%, transparent 24%);
+            radial-gradient(circle at 40% 70%, ${T.tealSoft}55 0%, transparent 26%),
+            radial-gradient(circle at 15% 55%, rgba(255,255,255,0.18) 0%, transparent 20%),
+            radial-gradient(circle at 70% 85%, ${T.tealSoft}44 0%, transparent 24%);
           animation: waterDrift2 15s ease-in-out infinite;
         }
         .water-layer-3 {
           background:
-            radial-gradient(circle at 50% 10%, rgba(255,255,255,0.25) 0%, transparent 20%),
-            radial-gradient(circle at 85% 30%, rgba(255,255,255,0.2) 0%, transparent 16%);
+            radial-gradient(circle at 50% 10%, rgba(255,255,255,0.16) 0%, transparent 20%),
+            radial-gradient(circle at 85% 30%, rgba(255,255,255,0.14) 0%, transparent 16%);
           animation: waterDrift3 8.5s ease-in-out infinite;
         }
         .water-shimmer {
