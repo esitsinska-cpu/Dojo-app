@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
 /* ---------------------------------------------------------
@@ -87,37 +88,6 @@ function useDojoState() {
   return { score, addScore, seenAvertissement, markAvertissementSeen, loaded };
 }
 
-/* ---------------- Incident journal state (window.storage, private) ---------------- */
-function useIncidents() {
-  const [incidents, setIncidents] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await window.storage.get("dojo-v2-incidents", false);
-        if (r) setIncidents(JSON.parse(r.value) || []);
-      } catch (e) {}
-      setLoaded(true);
-    })();
-  }, []);
-
-  const persist = useCallback(async (next) => {
-    setIncidents(next);
-    try { await window.storage.set("dojo-v2-incidents", JSON.stringify(next), false); } catch (e) {}
-  }, []);
-
-  const addIncident = useCallback((incident) => {
-    persist([{ ...incident, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }, ...incidents]);
-  }, [incidents, persist]);
-
-  const removeIncident = useCallback((id) => {
-    persist(incidents.filter((it) => it.id !== id));
-  }, [incidents, persist]);
-
-  return { incidents, addIncident, removeIncident, loaded };
-}
-
 /* ---------------- Répétition espacée (système de Leitner, quiz par famille) ---------------- */
 const LEITNER_INTERVALS = [1, 2, 4, 9, 21]; // jours avant la prochaine révision, par boîte (0 à 4)
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -126,6 +96,35 @@ const addDaysISO = (days) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
+
+/* ---------------- Suivi des questions déjà réussies au moins une fois (indépendant des ---------------- */
+/* boîtes Leitner, qui redescendent à 0 après une erreur — un point n'est accordé qu'une */
+/* seule fois par technique, lors de sa toute première bonne réponse). */
+function useScoredQuestions() {
+  const [scored, setScored] = useState({}); // { itemKey: true }
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get("dojo-v2-scored", false);
+        if (r) setScored(JSON.parse(r.value) || {});
+      } catch (e) {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  const markScoredOnce = useCallback((itemKey) => {
+    setScored((prev) => {
+      if (prev[itemKey]) return prev; // déjà comptabilisé, rien à faire
+      const next = { ...prev, [itemKey]: true };
+      window.storage.set("dojo-v2-scored", JSON.stringify(next), false).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  return { scored, markScoredOnce, loaded };
+}
 
 function useSpacedRepetition() {
   const [srs, setSrs] = useState({}); // { itemKey: { box, nextReview } }
@@ -290,14 +289,14 @@ function SOSOverlay({ onClose }) {
                 <p style={{ fontFamily: "'Atkinson Hyperlegible'", fontWeight: 700, fontSize: 15.5, color: T.ink, marginBottom: 10 }}>
                   La priorité n'est plus la communication, c'est votre sécurité.
                 </p>
-                <p style={{ fontFamily: "'Atkinson Hyperlegible'", fontSize: 14.5, color: T.ink, lineHeight: 1.55, marginBottom: 14 }}>
+                <p style={{ fontFamily: "'Atkinson Hyperlegible'", fontSize: 14.5, color: T.ink, lineHeight: 1.55, marginBottom: 14, textAlign: "justify" }}>
                   Contactez sans délai les services d'urgence de votre pays, ou une ligne d'écoute spécialisée dans les violences conjugales près de chez vous. Ces professionnels savent construire un plan de sécurité adapté à la réalité du danger, une compétence que cette application n'a pas vocation à remplacer.
                 </p>
                 <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 24, fontWeight: 500, color: T.alert, letterSpacing: 1 }}>112</div>
                 <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 2 }}>Numéro d'urgence européen — adaptez selon votre pays</div>
               </>
             ) : (
-              <p style={{ fontFamily: "'Montserrat'", fontSize: 14, color: T.ink, lineHeight: 1.55 }}>
+              <p style={{ fontFamily: "'Montserrat'", fontSize: 14, color: T.ink, lineHeight: 1.55, textAlign: "justify" }}>
                 Vous êtes en terrain verbal, pas en danger immédiat. Les scripts de ce dojo s'appliquent ici. Vous pouvez fermer cet écran et reprendre votre entraînement.
               </p>
             )}
@@ -315,7 +314,7 @@ function AvertissementSheet({ onDismiss }) {
       <div style={{ width: "100%", background: T.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "26px 22px calc(env(safe-area-inset-bottom) + 30px)", boxShadow: "0 -12px 40px rgba(35,40,35,0.12)", animation: "dojoSheetUp 340ms cubic-bezier(0.22,1,0.36,1) both" }}>
         <div style={{ width: 36, height: 4, background: "#E2E6E3", borderRadius: 2, margin: "0 auto 20px" }} />
         <h3 style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 19, color: T.ink, marginBottom: 10 }}>Avant de commencer</h3>
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.muted, lineHeight: 1.55, marginBottom: 18 }}>
+        <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.muted, lineHeight: 1.55, marginBottom: 18, textAlign: "justify" }}>
           Cette application est un outil d'entraînement à la protection psychologique en communication orale. Elle ne constitue pas un avis médical ou juridique, et ne remplace pas un professionnel en cas de violence ou de danger réel. L'icône « Point de sécurité », visible sur chaque écran, reste accessible à tout moment.
         </p>
         <button
@@ -335,20 +334,16 @@ const CYCLE = [
   { phase: "exhale", label: "Expirez", sub: "longuement, par la bouche", ms: 6000 },
 ];
 
-const MODES = {
-  rapide: { totalCycles: 3, label: "Rapide", sub: "≈ 30 secondes" },
-  prolongee: { totalCycles: 10, label: "Prolongée", sub: "≈ 3 minutes" },
-};
+// 11 cycles × 8,3 secondes ≈ 91 secondes — voir l'explication physiologique affichée
+// à l'écran : la durée retenue n'est pas arbitraire.
+const TOTAL_CYCLES = 11;
 
 function GroundingScreen({ onBack, onComplete }) {
-  const [mode, setMode] = useState("rapide");
   const [running, setRunning] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
-  const [cyclesLeft, setCyclesLeft] = useState(MODES.rapide.totalCycles);
+  const [cyclesLeft, setCyclesLeft] = useState(TOTAL_CYCLES);
   const [done, setDone] = useState(false);
-  const [offerMore, setOfferMore] = useState(false);
   const timeoutRef = useRef(null);
-  const totalCycles = MODES[mode].totalCycles;
 
   useEffect(() => {
     if (!running) return;
@@ -364,9 +359,8 @@ function GroundingScreen({ onBack, onComplete }) {
             setStepIdx(0);
             setDone(true);
             onComplete && onComplete();
-            if (mode === "rapide") setOfferMore(true);
             setTimeout(() => setDone(false), 1600);
-            return totalCycles;
+            return TOTAL_CYCLES;
           }
           setStepIdx(0);
           return next;
@@ -376,10 +370,8 @@ function GroundingScreen({ onBack, onComplete }) {
     return () => clearTimeout(timeoutRef.current);
   }, [running, stepIdx]);
 
-  const startMode = (m) => {
-    setMode(m);
-    setCyclesLeft(MODES[m].totalCycles);
-    setOfferMore(false);
+  const start = () => {
+    setCyclesLeft(TOTAL_CYCLES);
     setStepIdx(0);
     setRunning(true);
   };
@@ -390,7 +382,7 @@ function GroundingScreen({ onBack, onComplete }) {
     : running ? CYCLE[stepIdx].label : "Prêt(e) quand vous l'êtes";
   const sub = done
     ? "C'est assez pour ne plus répondre sous le coup de l'alarme, pas pour un calme complet"
-    : running ? CYCLE[stepIdx].sub : `${MODES[mode].totalCycles} cycles, ${MODES[mode].sub}`;
+    : running ? CYCLE[stepIdx].sub : `${TOTAL_CYCLES} cycles, ≈ 90 secondes`;
 
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", padding: "20px 22px 30px" }}>
@@ -398,29 +390,9 @@ function GroundingScreen({ onBack, onComplete }) {
 
       <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Outil zéro · chapitre 5</span>
       <h2 style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Ancrage avant de répondre</h2>
-      <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.45, marginBottom: 18 }}>
-        Le système nerveux ne redescend pas complètement en 30 secondes. Ce que ces cycles font vraiment : assez de calme pour parler sans que l'alarme décide à votre place.
+      <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.45, marginBottom: 18, textAlign: "justify" }}>
+        90 secondes n'est pas un chiffre choisi au hasard : c'est le temps que prend la vague hormonale d'une réaction émotionnelle pour redescendre d'elle-même, si elle n'est pas relancée par la pensée. Ces cycles servent à tenir ces 90 secondes sans laisser l'alarme décider à votre place.
       </p>
-
-      {!running && !done && (
-        <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-          {Object.entries(MODES).map(([key, m]) => (
-            <button
-              key={key}
-              onClick={() => setMode(key)}
-              className="dojo-press"
-              style={{
-                flex: 1, padding: "10px 0", borderRadius: 12,
-                border: `1.5px solid ${mode === key ? T.teal : "#E2E6E3"}`,
-                background: mode === key ? T.cardTint : "transparent",
-                color: T.ink, fontFamily: "'Montserrat'", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              }}
-            >
-              {m.label}<br /><span style={{ fontWeight: 400, fontSize: 11, color: T.muted }}>{m.sub}</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22 }}>
         <BreathOrb phase={phase} />
@@ -429,141 +401,24 @@ function GroundingScreen({ onBack, onComplete }) {
           <div style={{ fontFamily: "'Montserrat'", fontSize: 13, color: T.muted, marginTop: 4, maxWidth: 280 }}>{sub}</div>
         </div>
         {running && (
-          <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: T.muted }}>{totalCycles - cyclesLeft + 1} / {totalCycles}</div>
+          <div style={{ fontFamily: "'IBM Plex Mono'", fontSize: 12, color: T.muted }}>{TOTAL_CYCLES - cyclesLeft + 1} / {TOTAL_CYCLES}</div>
         )}
       </div>
 
-      {offerMore ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
-          <p style={{ fontFamily: "'Montserrat'", fontSize: 13, color: T.muted, textAlign: "center", marginBottom: 2 }}>
-            Si vous avez encore quelques minutes, continuer aide le système nerveux à redescendre davantage.
-          </p>
-          <button onClick={() => startMode("prolongee")} className="dojo-press" style={{ padding: "15px 0", borderRadius: 16, border: "none", background: T.teal, color: "#fff", fontFamily: "'Montserrat'", fontWeight: 700, fontSize: 14.5, cursor: "pointer", boxShadow: `0 6px 20px -6px ${T.teal}88` }}>
-            Continuer quelques minutes
-          </button>
-          <button onClick={() => setOfferMore(false)} className="dojo-press" style={{ padding: "13px 0", borderRadius: 16, border: `1.5px solid #E2E6E3`, background: "transparent", color: T.ink, fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-            C'est suffisant pour l'instant
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => { if (running) { setRunning(false); } else { startMode(mode); } }}
-          className="dojo-press"
-          style={{
-            padding: "16px 0", borderRadius: 16, border: running ? `1.5px solid #E2E6E3` : "none",
-            background: running ? "transparent" : T.teal, color: running ? T.ink : "#fff",
-            fontFamily: "'Montserrat'", fontWeight: 700, fontSize: 15, cursor: "pointer", marginTop: 20,
-            boxShadow: running ? "none" : `0 6px 20px -6px ${T.teal}88`,
-          }}
-        >{running ? "Arrêter" : "Commencer"}</button>
-      )}
+      <button
+        onClick={() => { if (running) { setRunning(false); } else { start(); } }}
+        className="dojo-press"
+        style={{
+          padding: "16px 0", borderRadius: 16, border: running ? `1.5px solid #E2E6E3` : "none",
+          background: running ? "transparent" : T.teal, color: running ? T.ink : "#fff",
+          fontFamily: "'Montserrat'", fontWeight: 700, fontSize: 15, cursor: "pointer", marginTop: 20,
+          boxShadow: running ? "none" : `0 6px 20px -6px ${T.teal}88`,
+        }}
+      >{running ? "Arrêter" : "Commencer"}</button>
 
       <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginTop: 18, textAlign: "center" }}>
         Deux inspirations courtes par le nez, l'une après l'autre, puis une longue expiration par la bouche. Le geste le plus rapide connu pour faire redescendre l'activation du système nerveux, un cran à la fois.
       </p>
-    </div>
-  );
-}
-
-/* ---------------- Journal d'incidents (règle des 3 occurrences, chapitre 11) ---------------- */
-function groupKey(person, tactic) {
-  return `${person.trim().toLowerCase()}|${tactic.trim().toLowerCase()}`;
-}
-
-function JournalScreen({ onBack, incidents, addIncident, removeIncident }) {
-  const [showForm, setShowForm] = useState(incidents.length === 0);
-  const [tactic, setTactic] = useState("");
-  const [person, setPerson] = useState("");
-  const [note, setNote] = useState("");
-
-  const counts = {};
-  incidents.forEach((it) => {
-    const k = groupKey(it.person, it.tactic);
-    counts[k] = (counts[k] || 0) + 1;
-  });
-
-  const handleSave = () => {
-    if (!tactic.trim() || !person.trim()) return;
-    addIncident({
-      tactic: tactic.trim(),
-      person: person.trim(),
-      note: note.trim(),
-      date: new Date().toISOString().slice(0, 10),
-    });
-    setTactic(""); setPerson(""); setNote("");
-    setShowForm(false);
-  };
-
-  const fieldStyle = {
-    width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E2E6E3",
-    background: "#fff", fontFamily: "'Montserrat'", fontSize: 14, color: T.ink, marginBottom: 10,
-    outline: "none",
-  };
-
-  return (
-    <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
-
-      <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Journal privé</span>
-      <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 25, color: T.ink, margin: "6px 0 6px" }}>Journal d'incidents</h1>
-      <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 20 }}>
-        Ce journal reste privé, sur cet appareil uniquement. Il ne fait rien d'autre que compter : si la même tactique, de la même personne, revient une troisième fois, ce n'est plus un problème de communication (chapitre 11).
-      </p>
-
-      {!showForm && (
-        <button onClick={() => setShowForm(true)} className="dojo-press" style={{ width: "100%", padding: "14px 0", borderRadius: 14, border: `1.5px solid ${T.teal}`, background: T.cardTint, color: T.teal, fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 14, cursor: "pointer", marginBottom: 18 }}>
-          + Ajouter un incident
-        </button>
-      )}
-
-      {showForm && (
-        <div style={{ background: T.card, borderRadius: 18, padding: 18, marginBottom: 20, boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
-          <label style={{ fontFamily: "'Montserrat'", fontSize: 11.5, color: T.muted, display: "block", marginBottom: 4 }}>Quelle tactique ?</label>
-          <input value={tactic} onChange={(e) => setTactic(e.target.value)} placeholder="Ex. minimisation, silence punitif..." style={fieldStyle} />
-
-          <label style={{ fontFamily: "'Montserrat'", fontSize: 11.5, color: T.muted, display: "block", marginBottom: 4 }}>De la part de qui ?</label>
-          <input value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Un prénom ou une initiale suffit" style={fieldStyle} />
-
-          <label style={{ fontFamily: "'Montserrat'", fontSize: 11.5, color: T.muted, display: "block", marginBottom: 4 }}>Note, si besoin (facultatif)</label>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Le fait précis, sans plus" style={{ ...fieldStyle, resize: "vertical", fontFamily: "'Montserrat'" }} />
-
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <button onClick={() => setShowForm(false)} className="dojo-press" style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "1.5px solid #E2E6E3", background: "transparent", color: T.ink, fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>Annuler</button>
-            <button onClick={handleSave} className="dojo-press" style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: T.teal, color: "#fff", fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>Enregistrer</button>
-          </div>
-        </div>
-      )}
-
-      {incidents.length === 0 && !showForm && (
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 13, color: T.muted, textAlign: "center", marginTop: 30 }}>
-          Rien d'enregistré pour l'instant. Le journal se remplit à votre rythme, un incident à la fois.
-        </p>
-      )}
-
-      {incidents.map((it) => {
-        const k = groupKey(it.person, it.tactic);
-        const isThird = counts[k] >= 3;
-        return (
-          <div key={it.id} style={{
-            background: isThird ? T.alertSoft : T.card, borderRadius: 16, padding: "14px 16px", marginBottom: 10,
-            border: isThird ? `1.5px solid ${T.alert}` : "none", boxShadow: isThird ? "none" : "0 2px 10px rgba(35,40,35,0.05)",
-          }}>
-            {isThird && (
-              <div style={{ fontFamily: "'Montserrat'", fontSize: 11, fontWeight: 700, color: T.alert, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                3ᵉ occurrence — règle du chapitre 11
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 15, color: T.ink }}>{it.tactic}</div>
-                <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 2 }}>{it.person} · <span style={{ fontFamily: "'IBM Plex Mono'" }}>{it.date}</span></div>
-                {it.note && <div style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.ink, marginTop: 6, lineHeight: 1.45 }}>{it.note}</div>}
-              </div>
-              <button onClick={() => removeIncident(it.id)} aria-label="Supprimer" className="dojo-press" style={{ background: "none", border: "none", color: T.muted, fontSize: 16, cursor: "pointer", padding: "0 0 0 10px", lineHeight: 1 }}>×</button>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -743,48 +598,102 @@ function MirrorTestScreen({ onBack }) {
   );
 }
 
-/* ---------------- Quiz par famille (chapitres 8-10, texte vérbatim du livre) ---------------- */
+/* ---------------- Quiz par famille (les 84 techniques du livre, texte vérbatim) ---------------- */
 const FAMILY_LABELS = {
+  fondamentaux: "Outils fondamentaux",
   pression: "Pression émotionnelle",
   distorsion: "Distorsion cognitive",
   controle: "Contrôle relationnel",
+  rupture: "Après la rupture",
+  terrains: "Terrains spécifiques",
+  contremanipulation: "Contre-manipulation",
 };
 
 const QUIZ_ITEMS = [
-  { family: "pression", name: "La culpabilisation (« après tout ce que j'ai fait pour toi »)", decl: "« Après tout ce que j'ai fait pour toi, c'est comme ça que tu me remercies ? »", script: "Je suis reconnaissant(e) pour ce que tu as fait, et ça ne change rien à ma décision sur ce point précis." },
-  { family: "pression", name: "L'urgence fabriquée (« il faut décider maintenant »)", decl: "« Il me faut ta réponse tout de suite, sinon... »", script: "Je prends le temps qu'il me faut pour répondre sérieusement. Tu auras ma réponse à [moment précis]." },
-  { family: "pression", name: "Le chantage affectif (« si tu m'aimais vraiment »)", decl: "« Si tu m'aimais vraiment, tu ferais ça sans discuter. »", script: "Aimer quelqu'un ne veut pas dire être d'accord avec tout. Ma réponse reste non sur ce point." },
-  { family: "pression", name: "La menace voilée", decl: "« Fais attention à ce que tu dis, tu pourrais le regretter. » / un silence chargé suivi d'un « on verra bien ce qui se passe après ça... »", script: "Si tu as quelque chose de précis à me dire, dis-le clairement. Je ne réponds pas aux sous-entendus." },
-  { family: "pression", name: "Le love bombing (l'emprise dorée)", decl: "Une intensité relationnelle hors de proportion avec la durée de la relation (déclarations, cadeaux, projets d'avenir en quelques semaines).", script: "J'apprécie ton enthousiasme, et j'avance à mon propre rythme." },
-  { family: "pression", name: "La minimisation (« tu exagères, c'est rien »)", decl: "« Tu fais toute une histoire pour ça. » / « Franchement, il y a des gens qui ont de vrais problèmes. »", script: "Ce n'est peut-être pas grave pour toi, mais ça l'est pour moi, et c'est de ça qu'on parle." },
-  { family: "pression", name: "Le negging (le compliment empoisonné)", decl: "« T'es plutôt jolie pour quelqu'un qui ne se maquille pas. » / « J'aime bien que tu ne sois pas comme les autres filles qui font trop d'efforts. »", script: "C'est formulé comme un compliment, mais j'y entends surtout une critique. Tu voulais dire quoi exactement ?" },
-  { family: "pression", name: "La culpabilisation collective (« pense à la famille »)", decl: "« Qu'est-ce que la famille va penser ? » / « Tu ne fais pas juste ça pour toi, pense à tes enfants, à tes parents. »", script: "Ma décision me revient. Si d'autres personnes veulent m'en parler directement, elles sont les bienvenues, mais elle ne se prend pas par procuration." },
-  { family: "pression", name: "L'exigence de lecture des pensées (l'attente de deviner)", decl: "« Tu savais très bien que j'allais être en retard, tu aurais dû descendre les clés. » / un silence punitif après un besoin non exprimé qui n'a, logiquement, pas pu être anticipé.", script: "Je ne peux pas deviner ce que tu n'as pas dit. Si tu as besoin de quelque chose, dis-le-moi clairement, et je pourrai y répondre." },
-  { family: "pression", name: "Le future faking (les promesses sans lendemain)", decl: "« On ira vivre ensemble dès que j'aurai réglé ça » ou « l'année prochaine, on part au bout du monde », répété sur des mois sans qu'aucune démarche concrète ne suive.", script: "J'aimerais qu'on parle de ça avec une date et une première étape concrète, plutôt qu'un projet qui reste toujours dans le futur." },
-  { family: "pression", name: "Le breadcrumbing (les miettes d'attention)", decl: "De longues périodes de silence ou de désintérêt apparent, interrompues par un message chaleureux ponctuel, juste avant que vous ne commenciez à vous détacher.", script: "J'ai besoin d'une présence régulière, pas de messages ponctuels entre deux silences. Si ce n'est pas possible, je préfère qu'on soit clairs là-dessus." },
-  { family: "pression", name: "Le boundary pushing affectif (la limite comme preuve d'amour manquant)", decl: "« Une vraie relation ne devrait pas avoir besoin de limites comme ça. » / une limite acceptée verbalement, puis testée à nouveau quelques jours plus tard, comme si elle n'avait jamais été posée.", script: "Une limite n'est pas une négociation ni une preuve d'amour insuffisant. C'est une information sur ce dont j'ai besoin pour bien fonctionner dans cette relation." },
-  { family: "pression", name: "Le trauma dumping obligeant (la souffrance comme dette de présence)", decl: "Un désaccord ou une demande légitime interrompus par le récit soudain d'une souffrance passée, souvent déjà connue, amenée précisément au moment où un sujet inconfortable pour l'autre est sur la table.", script: "Ce que tu traverses compte, et je suis là pour en parler à un autre moment. Là, j'aimerais qu'on termine le sujet qu'on avait commencé." },
-  { family: "distorsion", name: "Le gaslighting (« ça n'est jamais arrivé »)", decl: "« Je n'ai jamais dit ça, tu inventes. » / « Tu es parano, personne n'a dit ça. »", script: "Je me souviens précisément de cet échange, et je fais confiance à ma mémoire sur ce point." },
-  { family: "distorsion", name: "Le déplacement des objectifs (moving goalposts)", decl: "« Ce n'est toujours pas suffisant » après avoir répondu exactement à ce qui avait été demandé.", script: "Tu avais demandé X, je l'ai fait. Si le critère change, dis-le clairement dès maintenant, sinon je considère que c'est réglé." },
-  { family: "distorsion", name: "Le sarcasme et l'humour toxique", decl: "Une remarque blessante suivie de « c'était pour rire, calme-toi ».", script: "Si c'est une blague, explique-moi où est l'humour, parce que je ne l'ai pas trouvée." },
-  { family: "distorsion", name: "La fausse équivalence", decl: "« Tu as été en retard une fois, moi j'ai menti pendant six mois, mais bon, on a tous nos défauts. »", script: "Ce ne sont pas des faits de même nature ni de même gravité, et je ne vais pas les traiter comme équivalents." },
-  { family: "distorsion", name: "Le mensonge par omission stratégique", decl: "Découvrir après coup un fait significatif que la personne connaissait et n'a jamais mentionné, alors qu'il changeait la situation.", script: "Ce que tu m'as dit n'était pas faux, mais tu as omis un élément qui changeait tout. Pour moi, c'est aussi grave qu'un mensonge direct." },
-  { family: "distorsion", name: "La comparaison à un absent idéalisé", decl: "« Mon ex ne faisait jamais ça. » / « Avec elle/lui, ça ne serait pas arrivé. »", script: "Je ne suis pas en compétition avec quelqu'un d'absent. Si quelque chose te manque ici, dis-le-moi directement." },
-  { family: "distorsion", name: "L'info dumping (noyer le poisson)", decl: "Une question simple (« as-tu fait X ? ») suivie d'un récit de dix minutes sur des sujets connexes, sans jamais revenir au fait demandé.", script: "Je vais reposer ma question précisément, parce que je n'ai pas encore la réponse : as-tu fait X, oui ou non ?" },
-  { family: "distorsion", name: "Le « playing dumb » (fausse incompréhension)", decl: "« Je ne vois vraiment pas de quoi tu parles » face à quelque chose de manifestement clair, répété après une reformulation simple.", script: "Je vais le formuler une dernière fois, très simplement. Si ce n'est toujours pas clair après ça, on peut le mettre par écrit." },
-  { family: "distorsion", name: "La non-excuse (l'excuse sans changement)", decl: "« Désolé(e) si tu l'as mal pris. » / « Je m'excuse si tu t'es senti(e) blessé(e) », une formulation qui déplace la responsabilité de l'acte vers la réaction de la personne blessée.", script: "Une excuse porte sur ce que tu as fait, pas sur ce que j'ai ressenti. Peux-tu reformuler ce que tu regrettes précisément ?" },
-  { family: "distorsion", name: "L'attribution d'intention (« je sais ce que tu voulais dire »)", decl: "« On sait tous les deux que tu as dit ça pour me blesser. » / « Ne fais pas semblant, je sais très bien ce que tu essaies de faire. »", script: "Tu es en train de me dire ce que je pensais, pas de me demander ce que je pensais. Voici ce que je voulais réellement dire :" },
-  { family: "distorsion", name: "Le piège de l'approbation rétroactive", decl: "« Vas-y, fais comme tu penses » suivi, des semaines plus tard, de « je savais que ça finirait mal, mais bon, tu ne m'écoutes jamais », sans qu'aucune réserve n'ait été exprimée au moment de la décision.", script: "Tu m'avais dit d'y aller à l'époque, sans réserve. Si tu avais un doute, j'aurais préféré l'entendre à ce moment-là." },
-  { family: "distorsion", name: "Le langage thérapeutique détourné", decl: "« Je ne peux pas t'aider à gérer ça, c'est ton trauma, pas le mien. » utilisé pour éviter une conversation légitime, ou « je protège ma paix » invoqué face à une critique raisonnable.", script: "Ce vocabulaire décrit de vrais concepts, et je ne pense pas qu'il s'applique ici. Le sujet reste [fait précis], pas ma santé mentale." },
-  { family: "controle", name: "Le silence punitif (ghosting relationnel)", decl: "Un silence soudain après un désaccord, sans explication, destiné à vous faire ramper vers la réconciliation.", script: "Je remarque que tu prends de la distance. Quand tu seras prêt(e) à en parler, je suis disponible, je ne vais pas courir après." },
-  { family: "controle", name: "La triangulation", decl: "« [Untel] pense comme moi, d'ailleurs tout le monde le dit. » / comparaisons répétées à un tiers valorisé.", script: "Ce qui compte ici, c'est ce qui se passe entre toi et moi, pas ce que pense [Untel]." },
-  { family: "controle", name: "La double contrainte (double bind / Catch-22)", decl: "« Tu devrais vouloir faire ça pour moi sans que j'aie à te le demander » (si vous le faites après qu'on vous l'a dit, ce n'est pas spontané ; si vous ne le faites pas, vous êtes égoïste) / « Sois plus spontané(e) ! » (une injonction qui s'annule elle-même dès qu'on cherche à l'exécuter).", script: "Je remarque que, quoi que je fasse ici, ce sera considéré comme insuffisant. Peux-tu formuler une demande que je peux réellement satisfaire ?" },
-  { family: "controle", name: "L'isolement progressif", decl: "« Tes amis ne nous veulent pas du bien. » / « On n'a pas vraiment besoin des autres, on se suffit. » répété au fil des mois.", script: "Mes relations avec mes proches ne se négocient pas. Je continuerai à les voir." },
-  { family: "controle", name: "Le contrôle financier", decl: "« Pourquoi tu as besoin de ton propre compte, on est ensemble non ? » / un contrôle strict et unilatéral des dépenses communes, sans réciprocité.", script: "L'autonomie financière n'est pas négociable pour moi. On peut parler d'un budget commun, pas de contrôle sur mes moyens personnels." },
-  { family: "controle", name: "Le silence évasif (la fuite déguisée)", decl: "Un sujet engageant abordé, suivi d'un « on en parle plus tard » systématique, jamais suivi d'effet, semaine après semaine.", script: "On a déjà reporté cette conversation plusieurs fois. Je propose qu'on en parle maintenant, ou qu'on fixe un moment précis, aujourd'hui, pour le faire." },
-  { family: "controle", name: "Le chantage à la rupture répété", decl: "« Si tu continues comme ça, je m'en vais » utilisé pour à peu près n'importe quel désaccord, puis oublié dès que la tension retombe.", script: "Si tu penses sérieusement à partir, on peut en parler posément. Si c'est dit pour clore la discussion, ça ne va pas m'y pousser plus vite." },
-  { family: "controle", name: "L'incompétence stratégique (weaponized incompetence)", decl: "Une tâche confiée revient bâclée, oubliée, ou « ratée » de façon répétée, alors que la même personne gère sans difficulté des tâches d'une complexité comparable dans d'autres domaines de sa vie.", script: "Je remarque que cette tâche n'est jamais faite correctement, alors que tu gères des choses bien plus complexes ailleurs. On peut en parler directement plutôt que je continue à la reprendre systématiquement." },
-  { family: "controle", name: "Le stonewalling (le mur de silence en plein conflit)", decl: "Une discussion en cours qui s'arrête net : silence total, refus de croiser le regard, ou départ sans explication, précisément au moment où un point sensible est abordé.", script: "Je remarque que tu te fermes complètement. Je vais faire une pause aussi, et on reprend cette conversation dans [délai précis], pas dans le vide." },
+  { family: "fondamentaux", name: "Le disque rayé (brouillage systémique)", declVariants: ["« Tu fais tout rater, et en plus tu n'as aucun respect pour mes projets, de toute façon tu as toujours été égoïste... »", "« Franchement, ça ne m'étonne même pas venant de toi, tu penses toujours qu'à toi. »", "« Bien sûr que tu dis ça, comme d'habitude tu te fiches de ce que je ressens. »", "« Ah super, encore une fois tu montres à quel point tu es incapable de penser à quelqu'un d'autre. »"], script: "J'entends ton mécontentement, mais ma décision reste inchangée.", formula: "[Reconnaître le propos de l'autre en une formule neutre, sans y répondre sur le fond] + [répéter ensuite la position initiale, presque mot pour mot, sans l'étoffer ni la justifier davantage]." },
+  { family: "fondamentaux", name: "La dissociation stratégique (filtre sensoriel)", declVariants: ["Une attaque frontale ou une inversion de culpabilité.", "« Tu es vraiment quelqu'un de méprisable, tu le sais ça ? »", "« C'est toujours de ta faute si on en arrive là, avoue-le. »", "« Franchement tu me dégoûtes parfois. »"], script: "(en silence intérieur) C'est sa météo intérieure, cela ne m'appartient pas.", formula: "[Se dire intérieurement que ce qui est dit décrit l'état de l'autre, pas une vérité sur soi] + [répondre à l'extérieur par un minimum neutre, sans contredire ni valider]." },
+  { family: "fondamentaux", name: "La restitution de la responsabilité (retour de flamme)", declVariants: ["« Si je suis de mauvaise humeur, c'est à cause de ton attitude ce matin. »", "« Si je m'énerve comme ça, c'est uniquement parce que tu m'as mis(e) dans cet état. »", "« Tu vois ce que tu me fais ressentir ? C'est de ta faute si je réagis comme ça. »", "« Je ne serais pas dans cet état si tu n'avais pas fait ça. »"], script: "C'est ta façon de vivre ta journée, et je te laisse la responsabilité de tes ressentis et de tes choix d'humeur.", formula: "[Nommer que l'état ou l'émotion évoqués appartiennent à celui qui les vit] + [refuser d'en endosser la responsabilité, sans contre-attaquer ni se justifier]." },
+  { family: "fondamentaux", name: "Le rocher gris (gray rock)", declVariants: ["Une tentative de vous entraîner dans un débat sans fin, en particulier avec un profil qui se nourrit explicitement de votre réaction (narcissique, psychopathe — chapitre III).", "« Allez, réponds-moi, pourquoi tu ne dis rien ? »", "« On va en discuter encore et encore jusqu'à ce que tu admettes que j'ai raison. »", "« Tu ne peux pas juste m'ignorer comme ça, réagis un peu ! »"], script: "Ok.", formula: "[Répondre par le minimum d'information factuelle possible] + [aucun détail personnel, aucune émotion visible, rien à quoi l'autre pourrait accrocher une relance]." },
+  { family: "fondamentaux", name: "Exiger la définition exacte des termes", declVariants: ["« Tu es égoïste. » / « Tu manques de maturité. »", "« T'es vraiment quelqu'un de compliqué. »", "« Tu es tellement immature parfois. »", "« Franchement, t'es lourd(e) à gérer. »"], script: "Précisément, qu'est-ce que tu entends par \"égoïste\" dans cette situation ? Donne-moi un fait précis.", formula: "[Poser une question qui exige un exemple concret ou une définition précise] + [refuser toute généralité comme réponse valable]." },
+  { family: "fondamentaux", name: "Demander la preuve matérielle", declVariants: ["« Tout le monde trouve que tu abuses. » / « Tu fais toujours ça. »", "« Tout le monde le dit, tu sais. »", "« C'est systématique chez toi, ça arrive constamment. »", "« On en a tous parlé, et tout le monde est d'accord avec moi. »"], script: "Qui est \"tout le monde\" exactement ? Peux-tu me citer les noms ?", formula: "[Demander un fait vérifiable, une date, un document] + [ne pas accepter une affirmation non étayée comme suffisante]." },
+  { family: "fondamentaux", name: "Exiger des solutions claires", declVariants: ["Un reproche qui tourne en rond sans jamais proposer de solution — le but est de vous épuiser.", "« Rien ne va jamais avec toi, c'est fatigant. »", "« Encore et toujours la même chose, ça n'en finit jamais. »", "« Tu ne changeras donc jamais, c'est désespérant. »"], script: "Si je résume, tu n'es pas content. Qu'est-ce que tu proposes concrètement, par A + B, pour régler ce problème dès aujourd'hui ?", formula: "[Transformer une plainte vague en demande de solution concrète] + [renvoyer la charge de proposer, pas seulement de critiquer]." },
+  { family: "fondamentaux", name: "La technique de l'édredon (le brise-élan)", declVariants: ["Une affirmation péremptoire lancée pour vous entraîner dans un débat sans fin.", "« De toute façon, tout le monde sait que j'ai raison là-dessus. »", "« C'est évident, il n'y a même pas à en discuter. »", "« Franchement, n'importe qui te dirait la même chose que moi. »"], script: "C'est une vision des choses, oui.", formula: "[Valider le droit de l'autre à penser ce qu'il pense] + [sans jamais valider le contenu de ce qu'il affirme]." },
+  { family: "fondamentaux", name: "Le recadrage de sens (échelle d'abstraction)", declVariants: ["« Tu es complètement irresponsable. » / « Tu gâches tout. »", "« Tu es quelqu'un de complètement fermé, tout le monde le sait. »", "« Il y a un problème avec toi, en général. »", "« C'est toujours pareil avec toi, aucune nuance. »"], script: "Complètement ? Tu veux dire précisément par rapport à quel détail d'aujourd'hui ?", formula: "[Reprendre le mot généralisant employé] + [le ramener au fait précis, ou l'étirer jusqu'à l'absurde pour en révéler l'excès]." },
+  { family: "fondamentaux", name: "La question piège (le miroir inversé)", declVariants: ["Une affirmation péremptoire non étayée.", "« Franchement, personne ne pense comme toi là-dessus. »", "« Ça se voit, tout le monde en a assez de ce comportement. »", "« Les gens en parlent, tu sais, de ton attitude. »"], script: "Qu'est-ce qui te fait dire ça précisément ?", formula: "[Renvoyer la question à celui qui l'a posée, sous forme d'exigence de preuve] + [ne pas endosser la charge de se défendre en premier]." },
+  { family: "fondamentaux", name: "Le miroir défléchissant (recentrage immédiat)", declVariants: ["« C'est facile de dire ça avec tes privilèges. » / « Tu dis ça parce que tu es stressé. »", "« Tu es tellement centré(e) sur toi, ça devient pénible. »", "« On voit bien que tu ne penses qu'à ton petit confort. »", "« Typique de ta part, encore une fois. »"], script: "C'est une interprétation intéressante sur ma personne, mais revenons au dossier qui nous concerne.", formula: "[Ignorer l'attaque personnelle sans la nier ni la contester] + [ramener immédiatement au fait ou au sujet initial]." },
+  { family: "fondamentaux", name: "L'isolement du fait (mise en lumière)", declVariants: ["Toute attaque personnelle utilisée pour éviter de répondre sur le fond.", "« Attends, on ne parlait pas de ça du tout, change pas de sujet. »", "« Tu détournes encore la conversation, comme d'habitude. »", "« Pourquoi tu ramènes toujours autre chose sur le tapis ? »"], script: "Tu déplaces le débat sur ce que je suis au lieu de répondre sur le fond. Qu'est-ce qui te dérange dans l'argument que je viens de poser ?", formula: "[Nommer factuellement le changement de sujet ou la diversion] + [reformuler la question initiale sans l'abandonner]." },
+  { family: "fondamentaux", name: "L'accord paradoxal (désescalade totale)", declVariants: ["« Tu es trop rigide. » / « Tu es toujours comme ça. »", "« Tu es vraiment quelqu'un d'insupportable parfois. »", "« Franchement, t'es difficile à vivre. »", "« Personne ne pourrait te supporter longtemps. »"], script: "C'est possible, oui. N'empêche que la question de X reste posée. Comment on la traite ?", formula: "[Valider ouvertement et sans réserve la critique reçue] + [ne rien ajouter qui puisse relancer le conflit]." },
+  { family: "fondamentaux", name: "Refuser le rôle de bourreau (la parade au \"Reverse\")", declVariants: ["« C'est moi qui souffre le plus dans cette histoire, tu ne penses jamais à moi. »", "« C'est toujours moi le méchant dans cette histoire, hein. »", "« Tu me fais passer pour le/la coupable une fois de plus. »", "« Regarde ce que tu me forces à devenir avec ton comportement. »"], script: "Je peux entendre que tu souffres. Ça ne répond pas à ce que je viens de te dire sur [le fait initial].", formula: "[Nommer explicitement l'inversion des rôles à voix haute] + [refuser d'entrer dans une comparaison de qui souffre le plus]." },
+  { family: "fondamentaux", name: "La victimisation préventive", declVariants: ["En début de journée, avant tout reproche possible : « Je me sens tellement jugé(e) et incompris(e) en ce moment, j'ai l'impression que personne ne voit tout ce que je fais. »", "« De toute façon, si je dis quoi que ce soit, je vais encore passer pour le méchant. »", "« Je sais déjà que tu vas m'en vouloir, comme toujours. »", "« Vas-y, dis ce que tu as à dire, je suis habitué(e) à être celui/celle qu'on blâme. »"], script: "J'entends que tu traverses quelque chose. Ça n'empêche pas que j'aie un sujet à aborder avec toi tout à l'heure.", formula: "[Repérer une posture de victime affichée avant toute accusation] + [continuer à nommer les faits malgré l'inconfort que cela produit]." },
+  { family: "pression", name: "La culpabilisation (« après tout ce que j'ai fait pour toi »)", declVariants: ["« Après tout ce que j'ai fait pour toi, c'est comme ça que tu me remercies ? »", "« Avec tout ce que j'ai sacrifié pour toi, voilà comment tu me traites. »", "« Tu ne te rends même pas compte de tout ce que je fais pour toi. »", "« J'ai toujours été là pour toi, et c'est comme ça que tu me remercies. »"], script: "Je suis reconnaissant(e) pour ce que tu as fait, et ça ne change rien à ma décision sur ce point précis.", formula: "[Reconnaître ce qui a été donné, sans le nier] + [séparer cette reconnaissance de la décision présente, non négociable]." },
+  { family: "pression", name: "L'urgence fabriquée (« il faut décider maintenant »)", declVariants: ["« Il me faut ta réponse tout de suite, sinon... »", "« J'ai besoin d'une réponse là, maintenant, pas dans une heure. »", "« On n'a pas le temps d'attendre, décide tout de suite. »", "« Si tu ne réponds pas maintenant, c'est trop tard. »"], script: "Je prends le temps qu'il me faut pour répondre sérieusement. Tu auras ma réponse à [moment précis].", formula: "[Nommer l'urgence à voix haute comme une pression, pas un fait] + [se donner, ou demander, un délai de réflexion malgré la pression]." },
+  { family: "pression", name: "Le chantage affectif (« si tu m'aimais vraiment »)", declVariants: ["« Si tu m'aimais vraiment, tu ferais ça sans discuter. »", "« Si tu tenais vraiment à moi, tu ne discuterais même pas. »", "« Un vrai partenaire ferait ça sans se poser de questions. »", "« Ça prouve que tu ne m'aimes pas autant que tu le dis. »"], script: "Aimer quelqu'un ne veut pas dire être d'accord avec tout. Ma réponse reste non sur ce point.", formula: "[Séparer l'amour affirmé de la demande formulée] + [répondre à la demande sur le fond, sans laisser l'amour devenir un argument]." },
+  { family: "pression", name: "La menace voilée", declVariants: ["« Fais attention à ce que tu dis, tu pourrais le regretter. » / un silence chargé suivi d'un « on verra bien ce qui se passe après ça... »", "« Je ne dirai rien de plus, mais tu vas le regretter. »", "« Continue comme ça, et tu verras bien ce qui arrive. »", "« On verra qui a le dernier mot dans cette histoire. »"], script: "Si tu as quelque chose de précis à me dire, dis-le clairement. Je ne réponds pas aux sous-entendus.", formula: "[Demander que la conséquence sous-entendue soit formulée clairement] + [ne pas réagir à une menace qui reste non dite]." },
+  { family: "pression", name: "Le love bombing (l'emprise dorée)", declVariants: ["Une intensité relationnelle hors de proportion avec la durée de la relation (déclarations, cadeaux, projets d'avenir en quelques semaines).", "Une déclaration d'amour intense après seulement deux semaines de relation, accompagnée de projets d'avenir déjà très concrets.", "Des cadeaux et des attentions démesurées dès les premiers rendez-vous, avant même de se connaître vraiment.", "« On est faits l'un pour l'autre, je le sais déjà » dit après quelques jours seulement."], script: "J'apprécie ton enthousiasme, et j'avance à mon propre rythme.", formula: "[Remarquer l'intensité ou la vitesse inhabituelle de l'attention reçue] + [ralentir volontairement le rythme d'engagement, sans y répondre à la même vitesse]." },
+  { family: "pression", name: "La minimisation (« tu exagères, c'est rien »)", declVariants: ["« Tu fais toute une histoire pour ça. » / « Franchement, il y a des gens qui ont de vrais problèmes. »", "« Tu en fais toute une montagne pour pas grand-chose. »", "« Y'a bien pire dans la vie, arrête de dramatiser. »", "« C'est vraiment pas la peine de s'énerver pour ça. »"], script: "Ce n'est peut-être pas grave pour toi, mais ça l'est pour moi, et c'est de ça qu'on parle.", formula: "[Réaffirmer l'importance du fait tel que vous l'avez vécu] + [ne pas laisser le poids du fait être renégocié par l'autre]." },
+  { family: "pression", name: "Le negging (le compliment empoisonné)", declVariants: ["« T'es plutôt jolie pour quelqu'un qui ne se maquille pas. » / « J'aime bien que tu ne sois pas comme les autres filles qui font trop d'efforts. »", "« T'es pas mal, pour quelqu'un qui ne fait pas beaucoup d'efforts. »", "« J'aime bien que tu sois naturelle, pas comme celles qui se maquillent trop. »", "« C'est étonnant que tu sois douée à ce point, vu comme tu parais discrète. »"], script: "C'est formulé comme un compliment, mais j'y entends surtout une critique. Tu voulais dire quoi exactement ?", formula: "[Isoler la critique cachée dans le compliment] + [y répondre sur le fond, sans se laisser flatter par l'enveloppe]." },
+  { family: "pression", name: "La culpabilisation collective (« pense à la famille »)", declVariants: ["« Qu'est-ce que la famille va penser ? » / « Tu ne fais pas juste ça pour toi, pense à tes enfants, à tes parents. »", "« Pense à ce que ça va faire à toute la famille. »", "« Tout le monde va être touché par ta décision, pas seulement toi. »", "« Tu ne fais pas juste de la peine à moi, mais à tous les autres aussi. »"], script: "Ma décision me revient. Si d'autres personnes veulent m'en parler directement, elles sont les bienvenues, mais elle ne se prend pas par procuration.", formula: "[Séparer le groupe invoqué de la décision individuelle réelle] + [répondre en votre nom propre, sans porter la voix attribuée au collectif]." },
+  { family: "pression", name: "L'exigence de lecture des pensées (l'attente de deviner)", declVariants: ["« Tu savais très bien que j'allais être en retard, tu aurais dû descendre les clés. » / un silence punitif après un besoin non exprimé qui n'a, logiquement, pas pu être anticipé.", "« Tu aurais dû savoir ce dont j'avais besoin sans que je le dise. »", "« Si tu me connaissais vraiment, tu l'aurais deviné. »", "« Je ne devrais pas avoir à t'expliquer, c'est censé être évident. »"], script: "Je ne peux pas deviner ce que tu n'as pas dit. Si tu as besoin de quelque chose, dis-le-moi clairement, et je pourrai y répondre.", formula: "[Nommer qu'aucune demande explicite n'a été formulée] + [refuser la responsabilité d'un manquement à une attente jamais communiquée]." },
+  { family: "pression", name: "Le future faking (les promesses sans lendemain)", declVariants: ["« On ira vivre ensemble dès que j'aurai réglé ça » ou « l'année prochaine, on part au bout du monde », répété sur des mois sans qu'aucune démarche concrète ne suive.", "« Dès que j'aurai réglé ce truc, on part vivre ensemble », répété depuis des mois sans qu'aucune démarche ne suive.", "« L'année prochaine, promis, on se marie », entendu pour la troisième année consécutive.", "De grands projets communs évoqués régulièrement, jamais suivis d'une date ou d'une action concrète."], script: "J'aimerais qu'on parle de ça avec une date et une première étape concrète, plutôt qu'un projet qui reste toujours dans le futur.", formula: "[Distinguer la promesse verbale de l'action déjà engagée] + [ajuster votre confiance au comportement présent, pas aux mots sur l'avenir]." },
+  { family: "pression", name: "Le breadcrumbing (les miettes d'attention)", declVariants: ["De longues périodes de silence ou de désintérêt apparent, interrompues par un message chaleureux ponctuel, juste avant que vous ne commenciez à vous détacher.", "Un message affectueux après trois semaines de silence complet, juste avant que vous ne commenciez à passer à autre chose.", "De longues absences suivies d'un « tu me manques » isolé, sans aucune suite.", "Une attention chaleureuse ponctuelle qui réapparaît uniquement quand vous semblez vous détacher."], script: "J'ai besoin d'une présence régulière, pas de messages ponctuels entre deux silences. Si ce n'est pas possible, je préfère qu'on soit clairs là-dessus.", formula: "[Compter les gestes concrets, pas les intentions suggérées] + [ajuster votre investissement à ce qui est réellement offert, pas à ce qui est espéré]." },
+  { family: "pression", name: "Le boundary pushing affectif (la limite comme preuve d'amour manquant)", declVariants: ["« Une vraie relation ne devrait pas avoir besoin de limites comme ça. » / une limite acceptée verbalement, puis testée à nouveau quelques jours plus tard, comme si elle n'avait jamais été posée.", "« Une relation normale n'aurait pas besoin d'autant de règles entre nous. »", "Une limite acceptée un jour, puis testée de nouveau la semaine suivante comme si elle n'avait jamais existé.", "« Pourquoi tu compliques tout avec tes limites, on devrait pouvoir tout partager. »"], script: "Une limite n'est pas une négociation ni une preuve d'amour insuffisant. C'est une information sur ce dont j'ai besoin pour bien fonctionner dans cette relation.", formula: "[Répéter la limite comme une information sur vous, pas une négociation] + [ne pas transformer son maintien en preuve à fournir]." },
+  { family: "pression", name: "Le trauma dumping obligeant (la souffrance comme dette de présence)", declVariants: ["Un désaccord ou une demande légitime interrompus par le récit soudain d'une souffrance passée, souvent déjà connue, amenée précisément au moment où un sujet inconfortable pour l'autre est sur la table.", "Un désaccord interrompu soudainement par le récit d'une souffrance passée, déjà connue, amenée pile au moment où le sujet devient inconfortable.", "« Tu sais ce que j'ai vécu, comment tu peux me demander ça maintenant » en réponse à une demande raisonnable.", "Une confidence douloureuse resurgit systématiquement dès qu'un désaccord approche."], script: "Ce que tu traverses compte, et je suis là pour en parler à un autre moment. Là, j'aimerais qu'on termine le sujet qu'on avait commencé.", formula: "[Distinguer un besoin de soutien réel d'une charge répétée sans lien avec la situation présente] + [poser un cadre à l'écoute, sans devoir y renoncer entièrement]." },
+  { family: "distorsion", name: "Le gaslighting (« ça n'est jamais arrivé »)", declVariants: ["« Je n'ai jamais dit ça, tu inventes. » / « Tu es parano, personne n'a dit ça. »", "« Je n'ai absolument jamais dit ça, tu inventes des choses. »", "« Tu es en train de te faire des films, ça n'est jamais arrivé. »", "« Personne n'a dit ça, tu déformes tout ce qu'on te dit. »"], script: "Je me souviens précisément de cet échange, et je fais confiance à ma mémoire sur ce point.", formula: "[Documenter ou ancrer le fait par écrit avant l'échange] + [s'appuyer sur cette trace plutôt que sur la mémoire seule pendant la confrontation]." },
+  { family: "distorsion", name: "Le déplacement des objectifs (moving goalposts)", declVariants: ["« Ce n'est toujours pas suffisant » après avoir répondu exactement à ce qui avait été demandé.", "« Ce n'est toujours pas assez » après avoir répondu exactement à ce qui avait été demandé au départ.", "« En fait ce n'est pas vraiment ça que je voulais dire » une fois que la demande initiale a été satisfaite.", "Le critère change dès qu'il est atteint, sans jamais être reconnu comme rempli."], script: "Tu avais demandé X, je l'ai fait. Si le critère change, dis-le clairement dès maintenant, sinon je considère que c'est réglé.", formula: "[Nommer le déplacement du critère lui-même] + [demander que le critère soit fixé une fois, par écrit si besoin, avant de continuer à s'y conformer]." },
+  { family: "distorsion", name: "Le sarcasme et l'humour toxique", declVariants: ["Une remarque blessante suivie de « c'était pour rire, calme-toi ».", "« Oh là là, sensible aujourd'hui ? C'était juste pour rire. »", "« Détends-toi, c'était de l'humour, pas la peine d'en faire une affaire. »", "« T'as vraiment aucun second degré, c'était évidemment une blague. »"], script: "Si c'est une blague, explique-moi où est l'humour, parce que je ne l'ai pas trouvée.", formula: "[Répondre au contenu de l'attaque, pas à son enveloppe humoristique] + [refuser l'excuse implicite « c'était pour rire »]." },
+  { family: "distorsion", name: "La fausse équivalence", declVariants: ["« Tu as été en retard une fois, moi j'ai menti pendant six mois, mais bon, on a tous nos défauts. »", "« T'as été en retard une fois, moi je t'ai menti pendant des mois, mais bon, personne n'est parfait. »", "« On a tous les deux nos torts dans cette histoire, c'est kif-kif. »", "« Toi aussi tu as fait des erreurs, alors ça s'équilibre. »"], script: "Ce ne sont pas des faits de même nature ni de même gravité, et je ne vais pas les traiter comme équivalents.", formula: "[Refuser de comparer deux faits de gravité différente] + [maintenir la proportion réelle de chaque fait, séparément]." },
+  { family: "distorsion", name: "Le mensonge par omission stratégique", declVariants: ["Découvrir après coup un fait significatif que la personne connaissait et n'a jamais mentionné, alors qu'il changeait la situation.", "Découvrir après coup un détail que la personne connaissait depuis le début et n'a jamais mentionné, alors qu'il changeait tout.", "« Je ne t'ai pas menti, je n'ai juste pas tout dit » comme défense après la découverte d'un fait caché.", "Un élément essentiel tu délibérément, révélé seulement quand il devient impossible à cacher plus longtemps."], script: "Ce que tu m'as dit n'était pas faux, mais tu as omis un élément qui changeait tout. Pour moi, c'est aussi grave qu'un mensonge direct.", formula: "[Demander explicitement si un élément pertinent a été omis] + [traiter l'omission avérée avec le même sérieux qu'un mensonge direct]." },
+  { family: "distorsion", name: "La comparaison à un absent idéalisé", declVariants: ["« Mon ex ne faisait jamais ça. » / « Avec elle/lui, ça ne serait pas arrivé. »", "« Avec mon ex, ça ne se serait jamais passé comme ça. »", "« Untel(le) ne ferait jamais un truc pareil, lui/elle. »", "« Franchement, les autres sont tellement plus faciles à vivre. »"], script: "Je ne suis pas en compétition avec quelqu'un d'absent. Si quelque chose te manque ici, dis-le-moi directement.", formula: "[Refuser la comparaison telle quelle] + [ramener la discussion à la situation réelle, présente, entre vous deux]." },
+  { family: "distorsion", name: "L'info dumping (noyer le poisson)", declVariants: ["Une question simple (« as-tu fait X ? ») suivie d'un récit de dix minutes sur des sujets connexes, sans jamais revenir au fait demandé.", "Une question simple suivie d'un récit interminable sur des sujets sans rapport, sans jamais revenir à la question posée.", "« Laisse-moi t'expliquer depuis le début » en réponse à une question qui demandait juste oui ou non.", "Un flot de détails annexes noie systématiquement la question initiale."], script: "Je vais reposer ma question précisément, parce que je n'ai pas encore la réponse : as-tu fait X, oui ou non ?", formula: "[Répéter la question initiale, sans la laisser se diluer] + [ignorer les détails non pertinents ajoutés autour]." },
+  { family: "distorsion", name: "Le « playing dumb » (fausse incompréhension)", declVariants: ["« Je ne vois vraiment pas de quoi tu parles » face à quelque chose de manifestement clair, répété après une reformulation simple.", "« Je ne comprends vraiment pas de quoi tu parles, là. »", "« Explique-moi encore, je ne vois toujours pas où est le problème. »", "« Je ne vois pas ce que j'ai fait de mal, sois plus précis(e). »"], script: "Je vais le formuler une dernière fois, très simplement. Si ce n'est toujours pas clair après ça, on peut le mettre par écrit.", formula: "[Reformuler la demande une seule fois, plus simplement] + [ne pas la répéter indéfiniment au-delà de cette reformulation]." },
+  { family: "distorsion", name: "La non-excuse (l'excuse sans changement)", declVariants: ["« Désolé(e) si tu l'as mal pris. » / « Je m'excuse si tu t'es senti(e) blessé(e) », une formulation qui déplace la responsabilité de l'acte vers la réaction de la personne blessée.", "« Désolé(e) si tu l'as mal pris, c'était pas mon intention. »", "« Je m'excuse si tu t'es senti(e) blessé(e) par mes propos. »", "« Pardon si ça t'a dérangé(e), c'est pas grave d'habitude. »"], script: "Une excuse porte sur ce que tu as fait, pas sur ce que j'ai ressenti. Peux-tu reformuler ce que tu regrettes précisément ?", formula: "[Distinguer les mots de l'excuse du changement de comportement qui suit] + [attendre le second avant de considérer l'excuse comme valable]." },
+  { family: "distorsion", name: "L'attribution d'intention (« je sais ce que tu voulais dire »)", declVariants: ["« On sait tous les deux que tu as dit ça pour me blesser. » / « Ne fais pas semblant, je sais très bien ce que tu essaies de faire. »", "« On sait tous les deux que tu as dit ça pour me blesser exprès. »", "« Arrête de faire semblant, je sais très bien ce que tu penses vraiment. »", "« Inutile de nier, je connais tes vraies intentions. »"], script: "Tu es en train de me dire ce que je pensais, pas de me demander ce que je pensais. Voici ce que je voulais réellement dire :", formula: "[Réaffirmer votre intention réelle une seule fois, sans la défendre longuement] + [refuser que l'autre décrète, à votre place, ce que vous vouliez dire]." },
+  { family: "distorsion", name: "Le piège de l'approbation rétroactive", declVariants: ["« Vas-y, fais comme tu penses » suivi, des semaines plus tard, de « je savais que ça finirait mal, mais bon, tu ne m'écoutes jamais », sans qu'aucune réserve n'ait été exprimée au moment de la décision.", "« Vas-y, fais comme tu veux » suivi, des semaines plus tard, de « je savais que ça finirait mal, tu ne m'écoutes jamais », sans réserve exprimée au départ.", "Un accord donné sans nuance, puis reproché après coup comme s'il n'avait jamais existé.", "« Je t'avais prévenu(e) » alors qu'aucune réserve n'avait été formulée sur le moment."], script: "Tu m'avais dit d'y aller à l'époque, sans réserve. Si tu avais un doute, j'aurais préféré l'entendre à ce moment-là.", formula: "[Rappeler factuellement le soutien donné au moment de la décision] + [refuser d'en porter seul(e) les conséquences après coup]." },
+  { family: "distorsion", name: "Le langage thérapeutique détourné", declVariants: ["« Je ne peux pas t'aider à gérer ça, c'est ton trauma, pas le mien. » utilisé pour éviter une conversation légitime, ou « je protège ma paix » invoqué face à une critique raisonnable.", "« Je protège ma paix intérieure, je ne veux pas en discuter. »", "« C'est ton trauma qui parle, ça n'a rien à voir avec moi. »", "« Je ne fais plus de travail émotionnel gratuit, désolé(e). »"], script: "Ce vocabulaire décrit de vrais concepts, et je ne pense pas qu'il s'applique ici. Le sujet reste [fait précis], pas ma santé mentale.", formula: "[Reconnaître le vocabulaire employé sans en accepter automatiquement l'usage] + [ramener la discussion au comportement concret que ce vocabulaire sert à éviter de nommer]." },
+  { family: "controle", name: "Le silence punitif (ghosting relationnel)", declVariants: ["Un silence soudain après un désaccord, sans explication, destiné à vous faire ramper vers la réconciliation.", "Un silence complet après un désaccord, plusieurs jours durant, sans un mot d'explication.", "Ne plus répondre aux messages du jour au lendemain, sans raison donnée.", "Un mutisme soudain qui s'installe précisément après un désaccord."], script: "Je remarque que tu prends de la distance. Quand tu seras prêt(e) à en parler, je suis disponible, je ne vais pas courir après.", formula: "[Nommer le silence comme un choix de communication, pas une absence neutre] + [ne pas combler ce silence par une inquiétude ou des excuses non méritées]." },
+  { family: "controle", name: "La triangulation", declVariants: ["« [Untel] pense comme moi, d'ailleurs tout le monde le dit. » / comparaisons répétées à un tiers valorisé.", "« Untel(le) est complètement d'accord avec moi là-dessus, tu sais. »", "« Tout le monde pense comme moi sur ce sujet, demande autour de toi. »", "« Même tes proches trouvent que tu exagères sur ce point. »"], script: "Ce qui compte ici, c'est ce qui se passe entre toi et moi, pas ce que pense [Untel].", formula: "[Refuser d'entrer en compétition avec le tiers évoqué] + [ramener la discussion à la relation directe entre vous deux uniquement]." },
+  { family: "controle", name: "La double contrainte (double bind / Catch-22)", declVariants: ["« Tu devrais vouloir faire ça pour moi sans que j'aie à te le demander » (si vous le faites après qu'on vous l'a dit, ce n'est pas spontané ; si vous ne le faites pas, vous êtes égoïste) / « Sois plus spontané(e) ! » (une injonction qui s'annule elle-même dès qu'on cherche à l'exécuter).", "« Tu devrais deviner ce que je veux sans que j'aie à te le demander. »", "« Sois plus naturel(le), voyons ! »", "« Si tu le fais parce que je l'ai demandé, ça ne compte pas vraiment. »"], script: "Je remarque que, quoi que je fasse ici, ce sera considéré comme insuffisant. Peux-tu formuler une demande que je peux réellement satisfaire ?", formula: "[Nommer explicitement l'absence de réponse possible, sans chercher encore la bonne combinaison] + [demander une reformulation en une demande réellement satisfaisable]." },
+  { family: "controle", name: "L'isolement progressif", declVariants: ["« Tes amis ne nous veulent pas du bien. » / « On n'a pas vraiment besoin des autres, on se suffit. » répété au fil des mois.", "« Tes amis ne nous veulent pas vraiment de bien, à mon avis. »", "« On n'a pas besoin des autres, on se suffit à nous-mêmes. »", "« Ta famille ne comprend jamais rien à notre relation. »"], script: "Mes relations avec mes proches ne se négocient pas. Je continuerai à les voir.", formula: "[Réaffirmer le lien avec vos proches comme non négociable] + [maintenir ce lien dans les faits, pas seulement dans la déclaration]." },
+  { family: "controle", name: "Le contrôle financier", declVariants: ["« Pourquoi tu as besoin de ton propre compte, on est ensemble non ? » / un contrôle strict et unilatéral des dépenses communes, sans réciprocité.", "« Pourquoi tu as besoin d'un compte séparé, on est ensemble non ? »", "« Explique-moi chaque dépense que tu fais, je veux tout savoir. »", "« Je préfère gérer l'argent, tu n'as pas besoin d'y toucher. »"], script: "L'autonomie financière n'est pas négociable pour moi. On peut parler d'un budget commun, pas de contrôle sur mes moyens personnels.", formula: "[Nommer l'accès à l'argent comme un droit, pas une faveur à justifier] + [maintenir ou reconstruire une autonomie financière concrète, pas seulement verbale]." },
+  { family: "controle", name: "Le silence évasif (la fuite déguisée)", declVariants: ["Un sujet engageant abordé, suivi d'un « on en parle plus tard » systématique, jamais suivi d'effet, semaine après semaine.", "« On en parlera plus tard, là je n'ai pas le temps. »", "« Pas maintenant, on verra ça un autre jour. »", "« Ce n'est vraiment pas le bon moment pour cette discussion. »"], script: "On a déjà reporté cette conversation plusieurs fois. Je propose qu'on en parle maintenant, ou qu'on fixe un moment précis, aujourd'hui, pour le faire.", formula: "[Nommer que la responsabilité reste due malgré l'absence] + [fixer un moment précis où elle devra être assumée, plutôt que de la laisser filer]." },
+  { family: "controle", name: "Le chantage à la rupture répété", declVariants: ["« Si tu continues comme ça, je m'en vais » utilisé pour à peu près n'importe quel désaccord, puis oublié dès que la tension retombe.", "« Si tu continues comme ça, je m'en vais, c'est clair. »", "« Encore une fois et je pars pour de bon cette fois. »", "« Tu me pousses vers la sortie avec ce genre de comportement. »"], script: "Si tu penses sérieusement à partir, on peut en parler posément. Si c'est dit pour clore la discussion, ça ne va pas m'y pousser plus vite.", formula: "[Prendre la menace au mot une fois, sans y réagir en panique] + [ne pas modifier durablement son comportement pour une menace répétée sans jamais se réaliser]." },
+  { family: "controle", name: "L'incompétence stratégique (weaponized incompetence)", declVariants: ["Une tâche confiée revient bâclée, oubliée, ou « ratée » de façon répétée, alors que la même personne gère sans difficulté des tâches d'une complexité comparable dans d'autres domaines de sa vie.", "Une tâche confiée est systématiquement mal faite, alors que la même personne gère sans problème des choses bien plus complexes ailleurs.", "« Je ne sais vraiment pas comment faire ça » répété pour la même tâche simple, encore et encore.", "Un travail rendu volontairement bâclé pour ne plus jamais se le voir confier."], script: "Je remarque que cette tâche n'est jamais faite correctement, alors que tu gères des choses bien plus complexes ailleurs. On peut en parler directement plutôt que je continue à la reprendre systématiquement.", formula: "[Nommer le pattern répété, pas l'erreur isolée] + [refuser de reprendre systématiquement la tâche sans qu'elle soit réellement retentée par l'autre]." },
+  { family: "controle", name: "Le stonewalling (le mur de silence en plein conflit)", declVariants: ["Une discussion en cours qui s'arrête net : silence total, refus de croiser le regard, ou départ sans explication, précisément au moment où un point sensible est abordé.", "Un silence total et un regard vide qui s'installent brutalement dès qu'un point sensible est abordé.", "Quitter la pièce sans un mot, précisément au moment où la discussion devenait sérieuse.", "Un mur de silence complet, sans un regard, dès que le sujet devient inconfortable."], script: "Je remarque que tu te fermes complètement. Je vais faire une pause aussi, et on reprend cette conversation dans [délai précis], pas dans le vide.", formula: "[Nommer le retrait à voix haute, sans le poursuivre] + [proposer un moment de reprise plus tard plutôt que d'insister sur l'instant]." },
+  { family: "rupture", name: "Le mirroring initial (l'âme sœur sur mesure)", declVariants: ["Une personne qui semble partager, de façon presque troublante, les mêmes références culturelles, le même humour, les mêmes blessures d'enfance, dès les toutes premières conversations.", "Une adéquation parfaite de goûts et de valeurs découverte dès les toutes premières semaines, presque trop parfaite.", "« On aime exactement les mêmes choses, c'est fou » répété dès le premier mois.", "Une ressemblance troublante avec vos propres blessures, révélée étonnamment vite."], script: "C'est frappant à quel point on se ressemble sur ce point. Qu'est-ce qui, dans ton parcours, t'a amené(e) à ça précisément ?", formula: "[Remarquer une ressemblance affichée trop rapide ou trop parfaite] + [laisser le temps réel confirmer ou infirmer cette ressemblance, sans y accorder crédit immédiat]." },
+  { family: "rupture", name: "La menace de remplacement (le rival fantôme ou réel)", declVariants: ["« Un(e) collègue n'arrête pas de me draguer, c'est flatteur » glissé sans lien avec la conversation en cours, ou une comparaison directe : « Elle/il ne se plaindrait jamais pour un truc pareil. »", "« Il y a quelqu'un d'autre qui s'intéresse à moi en ce moment, tu sais. »", "« Je pourrais très bien trouver quelqu'un de mieux si je voulais. »", "« Certaines personnes seraient ravies d'être à ta place. »"], script: "Si tu as quelque chose à me dire sur notre relation, dis-le directement. Je ne réagis pas aux comparaisons.", formula: "[Nommer la comparaison introduite comme une tactique, pas une information] + [ne pas entrer en compétition avec la personne évoquée]." },
+  { family: "rupture", name: "La campagne de dénigrement (smear campaign)", declVariants: ["Des proches communs rapportent des propos inquiétants tenus sur vous, ou une publication publique qui, sans vous nommer, décrit une situation reconnaissable en termes très défavorables.", "Une version réécrite de la rupture, systématiquement partagée à l'entourage commun, vous présentant comme instable ou malhonnête.", "Des messages envoyés à plusieurs amis communs, chacun racontant une version différente et défavorable de vous.", "Une rumeur organisée qui circule dans votre cercle social après la séparation."], script: "Je ne vais pas répondre point par point à des rumeurs. Les personnes qui me connaissent réellement pourront juger par elles-mêmes.", formula: "[Rassembler des faits et témoins factuels plutôt que de répondre émotionnellement à chaque rumeur] + [répondre une fois, calmement, aux personnes qui comptent vraiment]." },
+  { family: "rupture", name: "Le déni public de la relation", declVariants: ["Apprendre que l'autre présente la relation, devant des tiers, comme insignifiante ou quasi inexistante (« on n'était même pas vraiment ensemble »), en contradiction frappante avec ce qui a été vécu.", "« On n'était même pas vraiment ensemble, ne dis pas n'importe quoi. »", "« Ce n'était rien de sérieux entre nous, franchement. »", "« Tu exagères l'importance de cette relation. »"], script: "Ce que nous avons vécu n'a pas besoin d'être validé par la façon dont il/elle en parle aujourd'hui.", formula: "[Ne pas chercher à faire reconnaître publiquement ce qui a été vécu] + [s'appuyer sur votre propre mémoire et vos proches directs, pas sur la validation publique de l'autre]." },
+  { family: "rupture", name: "Le sabotage du jugement sur autrui", declVariants: ["Vous constatez que vous doutez désormais systématiquement de vos premières impressions sur de nouvelles personnes, ou que vous demandez une validation extérieure pour des jugements que vous portiez auparavant avec assurance.", "Un doute qui s'étend au-delà de cette seule relation, jusqu'à ne plus faire confiance à son propre jugement ailleurs non plus.", "Se surprendre à douter de tous ses proches, pas seulement de la personne concernée.", "Une méfiance généralisée qui s'installe bien après la fin de la relation elle-même."], script: "Mon jugement sur cette relation a été faussé par elle, pas par moi. Je peux réapprendre à faire confiance à ma perception, un fait vérifié à la fois.", formula: "[Distinguer explicitement cette relation des autres relations de votre vie] + [tester activement votre jugement ailleurs, avec des retours extérieurs fiables]." },
+  { family: "rupture", name: "La menace d'abandon comme outil disciplinaire", declVariants: ["Toute contrariété, même mineure, suivie d'un « je ne sais pas si je vais rester avec quelqu'un comme toi », un schéma qui revient précisément aux moments où un désaccord ou une limite viennent d'être exprimés.", "« Si tu ne changes pas, je vais finir par partir un jour. »", "« Je ne sais pas combien de temps je vais encore supporter ça. »", "« Tu me pousses à bout, un jour je vais craquer et m'en aller. »"], script: "Si tu envisages sérieusement de partir, c'est une conversation à avoir posément, pas une réponse à ce que je viens de dire.", formula: "[Compter le nombre de fois où la menace a été formulée sans jamais être suivie d'effet] + [ajuster votre réaction à cette fréquence réelle, pas à l'intensité de chaque annonce]." },
+  { family: "rupture", name: "Le piège de la riposte", declVariants: ["Une provocation calculée, souvent juste avant une échéance procédurale ou une médiation, formulée pour être la plus irritante possible sans jamais franchir elle-même une ligne clairement condamnable.", "Une provocation délibérée juste avant un rendez-vous important, dans l'espoir d'obtenir une réaction utilisable ensuite.", "Un message volontairement blessant envoyé juste avant une médiation, pour provoquer une réponse à charge.", "Une pique calculée au pire moment, dans l'espoir d'une réaction excessive à exploiter ensuite."], script: "Je remarque cette provocation. Je ne vais pas y répondre de façon à te fournir ce que tu cherches.", formula: "[Reconnaître la provocation comme une tactique avant de réagir] + [répondre par écrit, posément, avec un délai, plutôt que dans l'instant émotionnel]." },
+  { family: "rupture", name: "Face à la menace de tout perdre (juridique ou matériel)", declVariants: ["« Si tu pars, je te prends tout, tu n'auras plus rien, et je me battrai pour avoir la garde complète. »", "« Tu vas tout perdre si tu continues dans cette voie, la maison, tout. »", "« Je vais me battre pour la garde et tu n'auras plus rien. »", "« Un bon avocat et tu regretteras d'être parti(e). »"], script: "Si nous devons régler des questions juridiques, ce sera avec des professionnels et selon les règles en vigueur, pas sur la base de ce que tu m'annonces maintenant.", formula: "[Vérifier la menace auprès d'un professionnel avant d'y réagir] + [ne pas laisser une menace juridique non vérifiée dicter une décision immédiate]." },
+  { family: "rupture", name: "Face à la dernière salve de promesses", declVariants: ["Une avalanche de promesses de thérapie, de changement radical, de gestes romantiques inhabituels, dans les jours qui précèdent ou suivent immédiatement l'annonce d'un départ, après des mois ou des années sans évolution réelle.", "Une intensification soudaine des promesses de changement, avec des gestes spectaculaires, juste au moment où la décision de partir devient concrète.", "Un grand geste romantique inattendu, précisément quand la rupture semble imminente.", "« Cette fois c'est différent, je te le promets » entendu juste avant le départ prévu."], script: "Ces promesses arrivent maintenant que je pars. Ma décision se fonde sur des mois de comportement réel, pas sur quelques jours de promesses.", formula: "[Comparer l'intensité de la promesse au comportement des mois précédents, pas des dernières heures] + [ne pas laisser un pic isolé annuler un pattern déjà établi]." },
+  { family: "terrains", name: "Le vol de mérite (credit stealing)", declVariants: ["Un supérieur ou collègue présente votre analyse en réunion en disant « j'ai pensé que... » sans vous mentionner, devant votre hiérarchie.", "Un collègue présente votre idée en réunion en disant « j'ai réfléchi et voici ce que je propose », sans vous mentionner.", "Votre analyse reprise mot pour mot par un supérieur devant la direction, sans citer sa source.", "Une proposition que vous aviez faite en privé, reprise publiquement comme venant d'un autre."], script: "Je suis content(e) que cette proposition avance, pour être précis sur son origine, c'est l'analyse que j'ai partagée dans le document du [date].", formula: "[Rétablir le fait daté et vérifiable, sans accusation directe] + [le faire au moment et devant les personnes où le mérite a été attribué à tort]." },
+  { family: "terrains", name: "La menace voilée sur l'emploi", declVariants: ["« Ce serait dommage que ça se sache au moment des évaluations. » / « Je ne suis pas sûr(e) que ton poste soit si sécurisé que ça en ce moment. »", "« Fais attention à ton comportement, ça pourrait avoir des conséquences. »", "« Ce genre d'attitude ne passe pas inaperçu en période d'évaluation. »", "« On verra si ta position est toujours la même au prochain entretien. »"], script: "Je veux m'assurer de bien comprendre : y a-t-il un problème concret avec mon travail que tu souhaites aborder formellement ?", formula: "[Demander que la conséquence sous-entendue soit précisée clairement] + [documenter par écrit l'échange qui a suivi]." },
+  { family: "terrains", name: "La culture d'équipe comme prétexte", declVariants: ["« Ici, on est une famille, on ne compte pas ses heures. » / « Toute l'équipe se serre les coudes, ce n'est pas le moment de penser à soi. »", "« Un vrai membre de l'équipe ne compterait pas ses heures comme ça. »", "« On est une famille ici, on ne dit pas non à ce genre de demande. »", "« Ça fait partie de l'esprit d'équipe, tout le monde le fait. »"], script: "Je suis engagé(e) envers l'équipe, et ça reste compatible avec le fait de nommer clairement ma charge de travail actuelle.", formula: "[Nommer la demande concrète derrière l'appel à l'esprit d'équipe] + [y répondre sur le fond, comme une demande individuelle ordinaire]." },
+  { family: "terrains", name: "Le sabotage de réputation", declVariants: ["Découvrir, par un tiers, que des doutes sur votre travail circulent en amont, dans des termes que vous n'avez jamais entendus directement de la personne concernée.", "Des doutes discrets semés auprès de la hiérarchie sur votre fiabilité, jamais formulés directement en face.", "Une remarque glissée en aparté à un collègue, sur votre supposé manque de rigueur.", "Des insinuations répétées auprès de tiers, jamais assez claires pour être confrontées."], script: "J'ai appris que des réserves sur mon travail circulaient. Je préfère qu'on en parle directement, tous les deux, pour clarifier les choses.", formula: "[Ne pas répondre au doute rapporté indirectement] + [construire, par des faits documentés, une réputation qui parle d'elle-même]." },
+  { family: "terrains", name: "Le bouc émissaire d'équipe", declVariants: ["Un problème d'équipe survient, et le même nom revient systématiquement dans les explications informelles, avant même qu'une analyse réelle des causes n'ait eu lieu.", "La responsabilité d'un problème collectif systématiquement attribuée à la même personne, indépendamment des faits.", "« C'est encore de sa faute » devenu un réflexe du groupe, sans vérification des faits.", "Un échec d'équipe automatiquement mis sur le compte de la même personne à chaque fois."], script: "Avant d'attribuer ça à une personne en particulier, qu'est-ce qui, factuellement, dans le processus, a mené à ce résultat ?", formula: "[Documenter chaque attribution de responsabilité avec les faits réels] + [rappeler ces faits calmement à chaque nouvelle occurrence, sans dramatiser]." },
+  { family: "terrains", name: "Le dénigrement chronique et discret", declVariants: ["« C'est une bonne idée, un peu basique, mais bonne » ou un compliment systématiquement suivi d'une réserve mineure, à chaque occasion, sans exception.", "Une réussite minimisée par petites touches répétées, jamais assez visible pour être confrontée en une seule fois.", "« C'était facile de toute façon » glissé après chaque succès, discrètement, encore et encore.", "Des remarques minimisantes distillées régulièrement, jamais assez marquées individuellement pour être signalées."], script: "Je remarque un motif : mes propositions reçoivent souvent une réserve, même quand le retour général est positif. Peux-tu m'en dire plus sur ce que tu penses réellement ?", formula: "[Noter chaque occurrence, aussi mineure soit-elle] + [présenter le pattern cumulé plutôt qu'un seul incident isolément faible]." },
+  { family: "terrains", name: "Le sabotage par surcharge programmée", declVariants: ["Une mission confiée avec un délai manifestement intenable, ou sans les informations nécessaires déjà en possession d'autres personnes, suivie d'une critique sur le résultat une fois l'échéance dépassée.", "Une tâche confiée avec délibérément trop peu de temps ou d'informations, puis l'échec utilisé comme preuve d'incompétence.", "Un dossier transmis la veille de l'échéance, sans les éléments nécessaires pour le traiter correctement.", "Des ressources insuffisantes allouées volontairement, pour garantir l'échec du projet confié."], script: "Pour réussir cette mission dans ce délai, j'ai besoin de [ressource ou information précise]. Sans ça, je documente dès maintenant le risque sur le résultat.", formula: "[Signaler par écrit, en amont, le manque de ressources ou de délai] + [laisser une trace qui empêche que l'échec prévisible soit imputé après coup]." },
+  { family: "terrains", name: "La dette de vie (« après tout ce qu'on a sacrifié pour toi »)", declVariants: ["« On s'est sacrifiés pour toi pendant vingt ans, et voilà comment tu nous traites. » invoqué face à une limite ponctuelle et raisonnable.", "« On s'est sacrifiés pendant des années pour toi, et voilà comment tu nous remercies. »", "« Tout ce qu'on a fait pour toi, et tu oses nous dire non. »", "« Après tous nos sacrifices, tu pourrais bien faire cet effort. »"], script: "Je suis reconnaissant(e) pour ce que vous avez fait, sincèrement. Et ça ne change rien au fait que j'ai besoin de [limite précise] aujourd'hui.", formula: "[Reconnaître sincèrement ce qui a été donné] + [séparer cette reconnaissance de la limite actuelle, non négociable]." },
+  { family: "terrains", name: "Le rôle assigné (bouc émissaire ou pacificateur)", declVariants: ["« Tu as toujours été celui/celle qui fait des histoires. » / « C'est toujours à toi d'arranger les choses, pourquoi tu ne le fais pas cette fois ? »", "« Toi, tu as toujours été la raisonnable de la famille » utilisé pour vous renvoyer systématiquement à un rôle fixé depuis l'enfance.", "« Ce n'est pas ton genre de refuser d'habitude » quand vous vous écartez du rôle attendu depuis toujours.", "Une surprise ostensible chaque fois que vous sortez du rôle qu'on vous a assigné très tôt."], script: "Ce rôle a pu être vrai à un moment, mais je ne suis pas obligé(e) de le tenir indéfiniment. Aujourd'hui, ma position est celle-ci : [position actuelle].", formula: "[Nommer le rôle attribué depuis longtemps] + [agir délibérément en dehors de ce rôle, même si cela dérange l'équilibre habituel]." },
+  { family: "terrains", name: "La loyauté testée par les rituels familiaux", declVariants: ["« Si tu ne viens pas à Noël, ça veut dire que tu ne fais plus partie de la famille. » / « Ta présence à cet événement n'est pas négociable. »", "« Si tu ne viens pas à Noël cette année, ça va se voir, tu sais. »", "« Ton absence à cet anniversaire en dira long sur toi. »", "« Toute la famille remarquera que tu n'étais pas là. »"], script: "Ma présence ou mon absence à un moment donné ne mesure pas mon appartenance à cette famille. Pour cette fois, ma réponse est [oui/non], et ça reste vrai indépendamment de ce que ça signifie pour vous.", formula: "[Séparer la présence physique de la loyauté réelle] + [décider de sa présence sur des critères logistiques, pas comme un test à réussir]." },
+  { family: "terrains", name: "Le chantage à la génération suivante", declVariants: ["« Tes enfants ne connaîtront pas leurs grands-parents à cause de toi. » / « Tu prives ta fille/ton fils de sa famille. »", "« Pense à ce que ça va faire aux petits-enfants, cette décision. »", "« Les enfants vont en pâtir si tu continues comme ça. »", "« Tu prives toute la prochaine génération à cause de ce choix. »"], script: "Les liens entre mes enfants et vous se construisent sur la base du respect envers moi aussi. Ce n'est pas moi qui les prive de quoi que ce soit.", formula: "[Distinguer l'impact réel sur les petits-enfants de l'argument invoqué] + [maintenir la limite si l'impact allégué ne résiste pas à l'examen]." },
+  { family: "terrains", name: "L'enfant messager", declVariants: ["L'enfant rapporte : « Papa/Maman a dit que tu devais... » ou revient d'un week-end chargé d'un message clairement destiné à l'autre parent.", "« Dis à ton père/ta mère que... » utilisé systématiquement pour transmettre reproches ou informations, au lieu de communiquer directement.", "Un message de reproche transmis via l'enfant, plutôt qu'un contact direct entre parents.", "L'enfant chargé de relayer une information logistique qui aurait dû passer par les adultes."], script: "Je ne communique pas de sujets adultes par l'intermédiaire de notre enfant. Si tu as un point à aborder, contacte-moi directement.", formula: "[Rediriger systématiquement vers une communication directe entre adultes] + [refuser de répondre à un message transmis par l'enfant]." },
+  { family: "terrains", name: "Le sabotage du planning", declVariants: ["Des changements récurrents annoncés à la dernière minute, chacun isolément « raisonnable », mais dont la fréquence dépasse ce que le hasard expliquerait.", "Un changement d'horaire annoncé la veille, de façon répétée, avec à chaque fois une excuse en apparence valable.", "Un échange d'enfant décalé au dernier moment, encore une fois, avec une raison différente à chaque fois.", "Le planning modifié systématiquement au dernier moment, jamais annoncé à l'avance."], script: "Le planning convenu reste la référence. Pour tout changement, j'ai besoin d'un accord écrit à l'avance, pas d'un ajustement le jour même.", formula: "[Documenter chaque changement tardif avec sa date] + [proposer un canal écrit unique pour tout ajustement de planning]." },
+  { family: "terrains", name: "L'aliénation parentale", declVariants: ["L'enfant répète des jugements négatifs sur l'autre parent avec des mots qui ne semblent pas les siens, ou exprime une réticence croissante et inexpliquée à voir l'autre parent.", "L'enfant répète des jugements négatifs sur l'autre parent, avec des mots qui ne semblent pas les siens.", "Une réticence croissante et inexpliquée de l'enfant à voir l'autre parent, apparue progressivement.", "Des propos dévalorisants sur l'autre parent, glissés régulièrement devant l'enfant."], script: "Auprès de l'enfant : « Papa/Maman t'aime et est content(e) de te voir. » (sans commenter ni contre-attaquer l'autre parent devant l'enfant, jamais).", formula: "[Maintenir un lien stable et chaleureux avec l'enfant malgré le dénigrement rapporté] + [ne pas répondre par un dénigrement symétrique de l'autre parent]." },
+  { family: "terrains", name: "La manipulation financière liée aux enfants", declVariants: ["Des paiements conditionnés informellement à un comportement (« je paierai quand tu seras plus arrangeant(e) sur le planning ») ou des demandes de dépenses non prévues présentées comme des urgences répétées.", "« Si tu veux voir les enfants ce week-end, tu devras d'abord régler cette dépense. »", "« La pension va changer si tu ne coopères pas davantage. »", "« Les frais scolaires attendront que tu sois plus arrangeant(e). »"], script: "Les questions financières concernant les enfants se traitent selon les termes convenus, indépendamment de tout autre sujet entre nous.", formula: "[Séparer la question financière de la relation avec l'enfant] + [traiter chaque désaccord financier par les canaux prévus, pas par la pression directe]." },
+  { family: "terrains", name: "La surcharge procédurale", declVariants: ["Des demandes répétées de documents déjà fournis, des exigences de validations multiples pour des décisions mineures, ou des relances via avocat pour des sujets qui auraient pu se régler par un message direct.", "Une multiplication de demandes de justificatifs et de démarches formelles, bien au-delà de ce que la situation exige réellement.", "Une nouvelle exigence administrative ajoutée chaque semaine, sans besoin réel apparent.", "Des procédures multipliées sans nécessité, pour épuiser plutôt que pour organiser."], script: "Cette demande peut se traiter simplement, sans passer par une procédure formelle. Je réponds directement au sujet posé.", formula: "[Répondre au strict nécessaire légal, sans suralimenter l'échange] + [solliciter un tiers si le volume devient disproportionné]." },
+  { family: "terrains", name: "Le sabotage de l'accompagnement de l'enfant", declVariants: ["Une colère disproportionnée, des refus répétés de signer une autorisation de soins, ou un dénigrement systématique du professionnel dès qu'un accompagnement pour l'enfant est évoqué.", "Une opposition disproportionnée à ce que l'enfant voie un psychologue, sans raison éducative claire exprimée.", "« Il/elle n'a besoin de rien de tout ça » face à une recommandation professionnelle claire concernant l'enfant.", "Un refus systématique de tout suivi extérieur proposé pour l'enfant, sans justification solide."], script: "Le suivi de [enfant] n'est pas une question de tort ou de raison entre nous. C'est un espace neutre pour lui/elle, indépendamment de ce qui se passe entre ses parents.", formula: "[Documenter le besoin réel de l'enfant avec un avis professionnel] + [maintenir la démarche malgré l'opposition, en s'appuyant sur cet avis extérieur]." },
+  { family: "terrains", name: "Le silence numérique calculé (« laissé sur lu »)", declVariants: ["Un message reste marqué « lu » pendant des heures ou des jours, sans réponse, suivi éventuellement d'une reprise de contact anodine comme si de rien n'était.", "Un message vu (accusé de lecture visible) laissé sans réponse pendant des heures, de façon manifestement délibérée.", "Une réponse qui tarde exactement le temps nécessaire pour provoquer l'inquiétude, encore et encore.", "Le message reste marqué comme lu, sans un mot en retour, pendant toute une soirée."], script: "Je vois que tu as vu mon message. Je n'ai pas besoin d'une réponse immédiate, mais dis-moi quand je peux compter en avoir une.", formula: "[Ne pas répondre à l'accusé de lecture par une relance anxieuse] + [répondre à votre rythme, sans vous excuser du délai]." },
+  { family: "terrains", name: "Le screenshot sorti de son contexte", declVariants: ["Découvrir qu'un message a été partagé à un tiers (ami commun, famille, réseaux sociaux) sans les messages précédents ou suivants qui en changeaient le sens.", "Un message isolé, partagé à un tiers, sans les échanges précédents qui en changeaient totalement le sens.", "Une capture d'écran unique circule, présentée sans le contexte qui la rendrait compréhensible autrement.", "Une phrase isolée, transmise hors de la conversation complète qui l'expliquait."], script: "Ce message a été partagé sans le reste de la conversation, ce qui en change le sens. Voici l'échange complet.", formula: "[Republier ou renvoyer l'échange complet, pas seulement le message isolé] + [laisser le contexte parler plutôt que d'argumenter contre l'extrait]." },
+  { family: "terrains", name: "L'escalade en groupe", declVariants: ["Une critique ou une accusation adressée directement dans un groupe familial, amical ou professionnel, plutôt qu'en privé, alors que le sujet ne concernait que deux personnes.", "Une critique lancée directement dans un groupe familial ou professionnel, alors que le sujet ne concernait que deux personnes.", "Un reproche formulé publiquement dans un chat de groupe, plutôt qu'en message privé.", "Une accusation lancée devant témoins dans un groupe, sans avoir été abordée en privé d'abord."], script: "Je préfère qu'on discute de ça en privé, je t'écris directement.", formula: "[Répondre brièvement et factuellement dans le groupe] + [proposer immédiatement de poursuivre en privé]." },
+  { family: "terrains", name: "La surveillance déguisée en attention", declVariants: ["« Si tu n'as rien à cacher, partage ta position en permanence. » / « Une relation de confiance, ça veut dire un accès total au téléphone de l'autre. »", "« Si tu n'as rien à cacher, tu peux bien me donner accès à ton téléphone. »", "« Partage ta position en permanence, c'est ça la confiance. »", "« Une vraie relation, ça veut dire un accès total à tout, non ? »"], script: "La confiance ne se mesure pas à l'accès total à ma vie privée. Je peux répondre à une inquiétude précise sans donner un accès permanent.", formula: "[Nommer la demande d'accès comme une question de confiance, pas de preuve d'amour] + [refuser l'accès sans que cela constitue en soi un aveu de culpabilité]." },
+  { family: "fondamentaux", name: "Le script DESC : poser une limite avant l'attaque", declVariants: ["Un changement de plan récurrent qui vous met devant le fait accompli, avant même qu'un conflit n'éclate.", "Des annulations répétées de dernière minute qui vous laissent systématiquement sans plan de secours.", "Un engagement pris puis modifié sans prévenir, plusieurs fois de suite.", "Une habitude installée de changer les plans sans en discuter au préalable."], script: "Quand tu changes les plans à la dernière minute, je me sens mis(e) devant le fait accompli. J'aimerais qu'on se prévienne mutuellement au moins la veille. Sinon, je garderai mon plan initial.", formula: "[Décrire le fait sans jugement] + [Exprimer le ressenti en \"je\"] + [Spécifier la demande concrètement] + [Énoncer la conséquence sans menace]." },
+  { family: "contremanipulation", name: "L'ambiguïté stratégique", declVariants: ["« Tu comptes faire quoi exactement de la maison, dis-le clairement. »", "« Sois clair(e) pour une fois, qu'est-ce que tu comptes faire exactement ? »", "« Donne-moi une réponse précise, pas des généralités. »", "« Je veux savoir exactement ce que tu prévois, pas des suppositions. »"], script: "Plusieurs options sont encore ouvertes, rien n'est arrêté pour l'instant.", formula: "[Répondre de façon délibérément vague, sans rien fournir qui puisse être retenu contre vous] + [rester vrai, mais volontairement incomplet]." },
+  { family: "contremanipulation", name: "Le silence comme pression active", declVariants: ["« Alors, tu ne dis rien ? Tu es d'accord ou pas ? »", "« Réponds-moi, tu es d'accord ou pas avec ça ? »", "« Pourquoi tu ne dis rien, ça veut dire quoi ce silence ? »", "« Tu ne vas quand même pas m'ignorer là-dessus ? »"], script: "(silence, regard neutre, sans réponse pendant plusieurs secondes, jusqu'à ce que l'autre reprenne la parole en premier)", formula: "[Laisser volontairement l'autre dans l'incertitude de votre réaction] + [le pousser à se découvrir en premier, par l'inconfort du silence]." },
+  { family: "contremanipulation", name: "Le compliment désamorçant", declVariants: ["« Tu ne penses jamais à personne d'autre que toi. »", "« Tu ne penses jamais à personne d'autre que toi, franchement. »", "« T'es tellement égocentrique parfois, ça devient fatigant. »", "« Tu ne fais jamais attention aux autres, c'est frappant. »"], script: "C'est marrant que tu dises ça, toi qui remarques toujours tout chez les gens.", formula: "[Répondre à l'attaque par une louange inattendue] + [priver l'autre de la résistance qu'il attendait, sans aucune trace d'ironie]." },
+  { family: "contremanipulation", name: "La provocation calculée", declVariants: ["En présence d'un tiers qui doute encore de ce qui se passe réellement.", "Devant un témoin qui doute encore, une remarque ambiguë vient d'être lancée.", "En présence d'un ami commun qui hésite encore à croire ce qui se passe.", "Un proche vient d'assister à un échange dont le sens reste flou pour lui."], script: "Tu peux répéter ce que tu viens de me dire, pour que [tiers] entende aussi ?", formula: "[Amener volontairement l'autre à réagir devant des témoins] + [laisser la démonstration se faire d'elle-même, sans un mot d'accusation]." },
 ];
 
 // Build stable MCQ options (correct + 2 distractors from the same family), fixed at module load
@@ -805,23 +714,37 @@ function buildQuizOptions() {
 }
 const QUIZ_QUESTIONS = buildQuizOptions();
 
-function QuizScreen({ onBack, recordAnswer, isDue }) {
+function QuizScreen({ onBack, recordAnswer, isDue, addScore, scored, markScoredOnce }) {
   const [mode, setMode] = useState(null); // null = choix pas fait, "all" | "due"
   const [i, setI] = useState(0);
   const [selected, setSelected] = useState(null);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
+  // Offset stable pour toute la session : à chaque ouverture du quiz, une formulation
+  // différente du même déclencheur est montrée (si la fiche a plusieurs variantes),
+  // pour éviter d'apprendre une phrase par cœur plutôt que le mécanisme derrière.
+  const [variantOffset] = useState(() => Math.floor(Math.random() * 4));
 
   const dueCount = QUIZ_QUESTIONS.filter((q) => isDue(q.name)).length;
   const questions = mode === "due" ? QUIZ_QUESTIONS.filter((q) => isDue(q.name)) : QUIZ_QUESTIONS;
   const q = questions[i];
+  const declText = q ? (q.declVariants ? q.declVariants[(i + variantOffset) % q.declVariants.length] : q.decl) : null;
   const isCorrect = selected === q?.script;
 
   const handleSelect = (opt) => {
     if (selected) return;
     setSelected(opt);
     const correct = opt === q.script;
-    if (correct) setScore((s) => s + 1);
+    if (correct) {
+      setScore((s) => s + 1);
+      // Le score global (progression des ceintures) ne récompense que la toute première
+      // bonne réponse à chaque technique — les révisions Leitner suivantes affinent la
+      // mémorisation mais ne gonflent plus artificiellement le score.
+      if (!scored[q.name]) {
+        addScore(1);
+        markScoredOnce(q.name);
+      }
+    }
     recordAnswer(q.name, correct);
   };
 
@@ -838,7 +761,7 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
     return (
       <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
         <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
-        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Chapitres 8-10</span>
+        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Les 84 techniques</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 20px" }}>Quiz par famille</h1>
 
         <button onClick={() => { setMode("due"); setI(0); setSelected(null); setScore(0); setDone(false); }} disabled={dueCount === 0} className="dojo-press" style={{ display: "block", width: "100%", textAlign: "left", padding: "16px 18px", borderRadius: 16, border: `1.5px solid ${dueCount > 0 ? T.teal : "#E2E6E3"}`, background: dueCount > 0 ? T.cardTint : T.card, marginBottom: 12, cursor: dueCount > 0 ? "pointer" : "default", opacity: dueCount === 0 ? 0.6 : 1 }}>
@@ -850,10 +773,10 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
 
         <button onClick={() => { setMode("all"); setI(0); setSelected(null); setScore(0); setDone(false); }} className="dojo-press" style={{ display: "block", width: "100%", textAlign: "left", padding: "16px 18px", borderRadius: 16, border: "1.5px solid #E2E6E3", background: T.card, cursor: "pointer" }}>
           <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 16, color: T.ink }}>Tout parcourir</div>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, marginTop: 3 }}>Les {QUIZ_QUESTIONS.length} questions, dans l'ordre des trois familles</div>
+          <div style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, marginTop: 3 }}>Les {QUIZ_QUESTIONS.length} techniques du livre, par famille</div>
         </button>
 
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, lineHeight: 1.5, marginTop: 18 }}>
+        <p style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, lineHeight: 1.5, marginTop: 18, textAlign: "justify" }}>
           Chaque bonne réponse espace un peu plus la prochaine révision de cette question ; une erreur la rapproche. C'est le principe de la répétition espacée.
         </p>
       </div>
@@ -867,7 +790,7 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
         <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Résultat</span>
         <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 26, color: T.ink, margin: "8px 0 18px" }}>{score} / {questions.length}</h1>
         <div style={{ background: T.card, borderRadius: 18, padding: 20, marginBottom: 18, boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
-          <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.ink, lineHeight: 1.55 }}>
+          <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.ink, lineHeight: 1.55, textAlign: "justify" }}>
             {score === questions.length
               ? "Toutes les réponses reconnues. Le réflexe se construit répétition après répétition, pas d'un coup."
               : "Ce score n'a rien d'un examen. Chaque tactique reconnue une fois se reconnaît plus vite la prochaine fois."}
@@ -884,17 +807,22 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
     <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
       <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{FAMILY_LABELS[q.family]}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: q.family === "contremanipulation" ? 4 : 6 }}>
+        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2, color: q.family === "contremanipulation" ? T.alert : T.teal, textTransform: "uppercase", fontWeight: 500 }}>{FAMILY_LABELS[q.family]}</span>
         <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 11, color: T.muted }}>{i + 1} / {questions.length}</span>
       </div>
+      {q.family === "contremanipulation" && (
+        <div style={{ fontFamily: "'Montserrat'", fontSize: 11, color: T.alert, marginBottom: 8, lineHeight: 1.4 }}>
+          À connaître, presque jamais à appliquer — jamais si un enfant commun est concerné.
+        </div>
+      )}
       <div style={{ height: 5, borderRadius: 3, background: T.cardTint, overflow: "hidden", marginBottom: 20 }}>
         <div style={{ height: "100%", width: `${((i + (selected ? 1 : 0)) / questions.length) * 100}%`, background: T.teal, borderRadius: 3, transition: "width 300ms ease" }} />
       </div>
 
       <div style={{ background: T.card, borderRadius: 18, padding: 18, marginBottom: 16, boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
         <div style={{ fontFamily: "'Montserrat'", fontSize: 11, color: T.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>On vous dit</div>
-        <div style={{ fontFamily: "'Playfair Display'", fontStyle: "italic", fontWeight: 500, fontSize: 16, color: T.ink, lineHeight: 1.4 }}>{q.decl}</div>
+        <div style={{ fontFamily: "'Playfair Display'", fontStyle: "italic", fontWeight: 500, fontSize: 16, color: T.ink, lineHeight: 1.4 }}>{declText}</div>
       </div>
 
       <div style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, marginBottom: 10 }}>Quelle réponse tient la ligne ?</div>
@@ -921,6 +849,13 @@ function QuizScreen({ onBack, recordAnswer, isDue }) {
           >{opt}</button>
         );
       })}
+
+      {selected && (
+        <div style={{ background: (q.family === "contremanipulation" ? T.alert : T.tealSoft) + "22", borderRadius: 14, padding: "13px 15px", marginTop: 4, marginBottom: 4 }}>
+          <div style={{ fontFamily: "'Montserrat'", fontSize: 10.5, color: q.family === "contremanipulation" ? T.alert : T.teal, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>La formule</div>
+          <div style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.ink, lineHeight: 1.45 }}>{q.formula}</div>
+        </div>
+      )}
 
       {selected && (
         <button onClick={next} className="dojo-press" style={{ width: "100%", padding: "14px 0", borderRadius: 14, border: "none", background: T.teal, color: "#fff", fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 14, cursor: "pointer", marginTop: 6 }}>
@@ -978,7 +913,7 @@ function FourFTestScreen({ onBack }) {
 
       {!done && (
         <>
-          <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
+          <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 8, textAlign: "justify" }}>
             Douze affirmations, en pensant à votre comportement réel des derniers mois, pas à celui que vous aimeriez avoir.
           </p>
           <div style={{ height: 5, borderRadius: 3, background: T.cardTint, overflow: "hidden", marginBottom: 22 }}>
@@ -1067,269 +1002,6 @@ function FourFTestScreen({ onBack }) {
   );
 }
 
-/* ---------------- Simulateur de scénario à embranchement ---------------- */
-/* Tout ce contenu (répliques d'ouverture, scripts, relances, réactions maladroites,
-   debriefs) est désormais vérbatim du livre — sections "La technique en conversation
-   complète" et "Si la ligne cède : les deux points de bascule" des chapitres 8, 9, 10. */
-const SIMULATOR_SCENARIOS = [
-  {
-    id: "culpabilisation",
-    family: "Pression émotionnelle · chapitre 8",
-    title: "La culpabilisation",
-    open: "« Après tout ce que j'ai fait pour toi, c'est comme ça que tu me remercies\u00A0? »",
-    choices: [
-      { id: "good", label: "Séparer gratitude et décision", text: "Je suis reconnaissant(e) pour ce que tu as fait, et ça ne change rien à ma décision sur ce point précis." },
-      { id: "bad", label: "S'excuser et céder", text: "Tu as raison, je suis désolé(e), je n'avais pas réalisé..." },
-    ],
-    badReply: "Voilà, tu vois, tu sais bien que j'ai raison.",
-    badDebrief: "Cette bascule valide, dès la première réplique, le lien entre dette et obéissance que la phrase initiale cherchait justement à créer. Le reste de l'échange se joue alors sur ce terrain faussé dès le départ.",
-    goodReply: "Donc tout ce que j'ai fait ne compte pour rien\u00A0?",
-    round2: [
-      { id: "hold", label: "Répéter sans se justifier", text: "Ça compte, et ma décision reste la même. Les deux sont vrais." },
-      { id: "over", label: "Justifier en détail", text: "Mais si, je reconnais tout, tu as fait tellement de choses, c'est juste que..." },
-    ],
-    holdDebrief: "La reformulation en boucle teste si la séparation tiendra sous pression répétée. Répéter la même formule sans développer davantage, plutôt que de chercher une nouvelle façon de se justifier, évite de rouvrir un débat sur la dette elle-même.",
-    overDebrief: "Développer une nouvelle justification, même après avoir bien répondu la première fois, redonne de la matière au manipulateur là où le silence sur ce point l'aurait privé de prise.",
-  },
-  {
-    id: "gaslighting",
-    family: "Distorsion cognitive · chapitre 9",
-    title: "Le gaslighting",
-    open: "« Je n'ai jamais dit ça, tu inventes. »",
-    choices: [
-      { id: "good", label: "Faire confiance à sa mémoire", text: "Je me souviens précisément de cet échange, et je fais confiance à ma mémoire sur ce point." },
-      { id: "bad", label: "Douter de soi", text: "Ah bon\u00A0? Peut-être que j'ai mal compris alors..." },
-    ],
-    badReply: "Tu vois, même toi tu n'es plus sûr(e).",
-    badDebrief: "Douter de sa propre mémoire sur la seule parole de l'autre est exactement le mécanisme sur lequel repose le gaslighting\u00A0: le doute devient la preuve recherchée, sans qu'aucun fait n'ait eu besoin d'être produit.",
-    goodReply: "Tu es vraiment en train de me dire que je mens\u00A0?",
-    round2: [
-      { id: "hold", label: "Recentrer, sans accuser", text: "Je ne dis pas que tu mens. Je dis ce dont je me souviens." },
-      { id: "over", label: "Prouver en détail", text: "Mais si, je me rappelle exactement l'heure, l'endroit, ce que tu portais..." },
-    ],
-    holdDebrief: "Le glissement de « tu inventes » à « tu es en train de me dire que je mens » est une tentative fréquente de forcer une accusation que vous n'avez jamais formulée. Recentrer sur la mémoire, sans accuser ni sur-justifier, désamorce cette relance sans y répondre sur son terrain.",
-    overDebrief: "Multiplier les détails pour « prouver » un souvenir invite justement à en chercher la faille, un seul détail approximatif suffisant alors à relancer le doute sur l'ensemble. Une reformulation simple et calme reste plus solide qu'un dossier de preuves improvisé.",
-  },
-  {
-    id: "silence",
-    family: "Contrôle relationnel · chapitre 10",
-    title: "Le silence punitif",
-    open: "Un silence soudain après un désaccord, sans explication, destiné à vous faire ramper vers la réconciliation.",
-    choices: [
-      { id: "good", label: "Ne pas courir après", text: "Je remarque que tu prends de la distance. Quand tu seras prêt(e) à en parler, je suis disponible, je ne vais pas courir après." },
-      { id: "bad", label: "Multiplier les messages", text: "Tu m'en veux\u00A0? J'ai fait quelque chose de mal\u00A0? Réponds-moi s'il te plaît..." },
-    ],
-    badReply: "Tu vois, il a fallu que tu insistes.",
-    badDebrief: "Courir après le silence, par plusieurs messages successifs, prolonge souvent la tactique\u00A0: elle vient de fonctionner exactement comme prévu, la relance anxieuse confirmant qu'il suffit d'attendre pour obtenir ce résultat.",
-    goodReply: "Tu ne m'as même pas redemandé si j'allais bien.",
-    round2: [
-      { id: "hold", label: "Rester disponible, sans plus", text: "Je t'ai laissé l'espace que tu semblais vouloir. Je suis là si tu veux en parler maintenant." },
-      { id: "over", label: "S'excuser par précaution", text: "Je suis vraiment désolé(e) pour tout ce qui a pu te blesser, quoi que ce soit..." },
-    ],
-    holdDebrief: "Le reproche final est une tentative fréquente de retourner contre vous votre propre respect de la distance demandée implicitement. Rester sur la même position, sans se justifier d'avoir « bien fait » de ne pas relancer, évite d'entrer dans ce nouveau round de culpabilisation.",
-    overDebrief: "S'excuser pour une faute non définie ouvre la porte à ce qu'elle soit redéfinie plus tard, à votre désavantage. Rester disponible sans anticiper une faute qu'on ne connaît pas encore protège mieux que des excuses préventives.",
-  },
-];
-
-function SimulatorScreen({ onBack }) {
-  const [scenarioIdx, setScenarioIdx] = useState(null);
-  const [step, setStep] = useState("open"); // open | badEnd | round2 | holdEnd | overEnd
-  const [chosen1, setChosen1] = useState(null);
-  const [chosen2, setChosen2] = useState(null);
-
-  const s = scenarioIdx !== null ? SIMULATOR_SCENARIOS[scenarioIdx] : null;
-
-  const reset = () => { setStep("open"); setChosen1(null); setChosen2(null); };
-  const pickScenario = (i) => { setScenarioIdx(i); reset(); };
-
-  const chooseFirst = (choice) => {
-    setChosen1(choice);
-    setStep(choice.id === "good" ? "round2" : "badEnd");
-  };
-  const chooseSecond = (choice) => {
-    setChosen2(choice);
-    setStep(choice.id === "hold" ? "holdEnd" : "overEnd");
-  };
-
-  if (!s) {
-    return (
-      <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
-        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Simulateur</span>
-        <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Construire sa réponse</h1>
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 20 }}>
-          Choisissez une scène. La conversation continue différemment selon la réponse choisie, comme dans un vrai échange.
-        </p>
-        {SIMULATOR_SCENARIOS.map((sc, i) => (
-          <button key={sc.id} onClick={() => pickScenario(i)} className="dojo-press-bouncy" style={{ display: "block", width: "100%", textAlign: "left", background: T.card, border: "none", borderRadius: 18, padding: "16px 18px", marginBottom: 12, cursor: "pointer", boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
-            <div style={{ fontFamily: "'Montserrat'", fontSize: 10.5, letterSpacing: 1, color: T.teal, textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>{sc.family}</div>
-            <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 16, color: T.ink }}>{sc.title}</div>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  const Bubble = ({ who, text }) => (
-    <div style={{
-      alignSelf: who === "them" ? "flex-start" : "flex-end",
-      background: who === "them" ? T.cardTint : T.teal, color: who === "them" ? T.ink : "#fff",
-      borderRadius: 16, padding: "12px 15px", maxWidth: "88%", marginBottom: 10,
-      fontFamily: "'Montserrat'", fontSize: 13.5, lineHeight: 1.4,
-    }}>{text}</div>
-  );
-
-  return (
-    <div style={{ minHeight: "100%", padding: "20px 22px 34px", display: "flex", flexDirection: "column" }}>
-      <button onClick={() => setScenarioIdx(null)} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de scène</button>
-
-      <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 1.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{s.family}</span>
-      <h2 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 21, color: T.ink, margin: "4px 0 16px" }}>{s.title}</h2>
-
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <Bubble who="them" text={s.open} />
-        {chosen1 && <Bubble who="me" text={chosen1.text} />}
-        {step === "badEnd" && <Bubble who="them" text={s.badReply} />}
-        {(step === "round2" || step === "holdEnd" || step === "overEnd") && <Bubble who="them" text={s.goodReply} />}
-        {chosen2 && <Bubble who="me" text={chosen2.text} />}
-      </div>
-
-      {step === "open" && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginBottom: 10 }}>Que répondez-vous\u00A0?</div>
-          {s.choices.map((c) => (
-            <button key={c.id} onClick={() => chooseFirst(c)} className="dojo-press" style={{ display: "block", width: "100%", textAlign: "left", padding: "13px 15px", borderRadius: 13, border: "1.5px solid #E2E6E3", background: T.card, color: T.ink, fontFamily: "'Montserrat'", fontSize: 13, marginBottom: 9, cursor: "pointer" }}>
-              <span style={{ fontWeight: 600 }}>{c.label}</span><br /><span style={{ color: T.muted, fontSize: 12 }}>{c.text}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {step === "round2" && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginBottom: 10 }}>Le manipulateur relance. Vous\u00A0?</div>
-          {s.round2.map((c) => (
-            <button key={c.id} onClick={() => chooseSecond(c)} className="dojo-press" style={{ display: "block", width: "100%", textAlign: "left", padding: "13px 15px", borderRadius: 13, border: "1.5px solid #E2E6E3", background: T.card, color: T.ink, fontFamily: "'Montserrat'", fontSize: 13, marginBottom: 9, cursor: "pointer" }}>
-              <span style={{ fontWeight: 600 }}>{c.label}</span><br /><span style={{ color: T.muted, fontSize: 12 }}>{c.text}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {(step === "badEnd" || step === "holdEnd" || step === "overEnd") && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{
-            background: step === "holdEnd" ? "#E3F1EC" : T.alertSoft, border: `1.5px solid ${step === "holdEnd" ? T.teal : T.alert}`,
-            borderRadius: 16, padding: 16, marginBottom: 16,
-          }}>
-            <div style={{ fontFamily: "'Montserrat'", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: step === "holdEnd" ? T.teal : T.alert, marginBottom: 6 }}>
-              {step === "holdEnd" ? "La ligne a tenu" : "Le piège a fonctionné"}
-            </div>
-            <div style={{ fontFamily: "'Montserrat'", fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
-              {step === "badEnd" ? s.badDebrief : step === "holdEnd" ? s.holdDebrief : s.overDebrief}
-            </div>
-          </div>
-          <button onClick={reset} className="dojo-press" style={{ width: "100%", padding: "13px 0", borderRadius: 14, border: `1.5px solid #E2E6E3`, background: "transparent", color: T.ink, fontFamily: "'Montserrat'", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
-            Rejouer cette scène
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------------- Mode contextuel (chapitres 16-19, texte vérbatim du livre) ---------------- */
-const CONTEXTS = [
-  { id: "travail", label: "Travail", chapter: "chapitre 16" },
-  { id: "famille", label: "Famille d'origine", chapter: "chapitre 17" },
-  { id: "coparentalite", label: "Coparentalité", chapter: "chapitre 18" },
-  { id: "ecrit", label: "Écrit et numérique", chapter: "chapitre 19" },
-];
-
-const CONTEXT_ITEMS = [
-  { context: "travail", name: "Le vol de mérite (credit stealing)", principle: "S'approprier publiquement le travail ou les idées d'un collègue, souvent lors d'une réunion où la victime ne peut pas répondre sans paraître mesquine.", decl: "Un supérieur ou collègue présente votre analyse en réunion en disant « j'ai pensé que... » sans vous mentionner, devant votre hiérarchie.", script: "Je suis content(e) que cette proposition avance, pour être précis sur son origine, c'est l'analyse que j'ai partagée dans le document du [date]." },
-  { context: "travail", name: "La menace voilée sur l'emploi", principle: "Sous-entendre une conséquence professionnelle négative sans jamais la formuler clairement, ce qui empêche de la contester ou de la documenter facilement.", decl: "« Ce serait dommage que ça se sache au moment des évaluations. » / « Je ne suis pas sûr(e) que ton poste soit si sécurisé que ça en ce moment. »", script: "Je veux m'assurer de bien comprendre : y a-t-il un problème concret avec mon travail que tu souhaites aborder formellement ?" },
-  { context: "travail", name: "La culture d'équipe comme prétexte", principle: "Invoquer l'esprit d'équipe, la culture d'entreprise ou la charge collective pour faire accepter des conditions déraisonnables (horaires, charge de travail) sans les nommer comme telles.", decl: "« Ici, on est une famille, on ne compte pas ses heures. » / « Toute l'équipe se serre les coudes, ce n'est pas le moment de penser à soi. »", script: "Je suis engagé(e) envers l'équipe, et ça reste compatible avec le fait de nommer clairement ma charge de travail actuelle." },
-  { context: "travail", name: "Le sabotage de réputation", principle: "Répandre des doutes discrets sur la fiabilité ou la compétence d'un collègue auprès de tiers (hiérarchie, autres équipes), jamais en face, pour saper une réputation sans jamais être identifiable comme la source.", decl: "Découvrir, par un tiers, que des doutes sur votre travail circulent en amont, dans des termes que vous n'avez jamais entendus directement de la personne concernée.", script: "J'ai appris que des réserves sur mon travail circulaient. Je préfère qu'on en parle directement, tous les deux, pour clarifier les choses." },
-  { context: "travail", name: "Le bouc émissaire d'équipe", principle: "Attribuer systématiquement à une même personne la responsabilité des problèmes collectifs, indépendamment des faits réels, jusqu'à ce que ce rôle devienne un réflexe partagé par le groupe entier.", decl: "Un problème d'équipe survient, et le même nom revient systématiquement dans les explications informelles, avant même qu'une analyse réelle des causes n'ait eu lieu.", script: "Avant d'attribuer ça à une personne en particulier, qu'est-ce qui, factuellement, dans le processus, a mené à ce résultat ?" },
-  { context: "travail", name: "Le dénigrement chronique et discret", principle: "Minimiser systématiquement, par petites touches répétées et jamais spectaculaires, les réussites ou les idées d'un collègue, assez subtil pour n'être jamais confrontable en une seule occasion, mais cumulatif dans son effet sur la confiance et la réputation.", decl: "« C'est une bonne idée, un peu basique, mais bonne » ou un compliment systématiquement suivi d'une réserve mineure, à chaque occasion, sans exception.", script: "Je remarque un motif : mes propositions reçoivent souvent une réserve, même quand le retour général est positif. Peux-tu m'en dire plus sur ce que tu penses réellement ?" },
-  { context: "travail", name: "Le sabotage par surcharge programmée", principle: "Confier une tâche avec des ressources, un délai ou des informations insuffisants pour réussir, puis utiliser l'échec prévisible comme preuve d'incompétence.", decl: "Une mission confiée avec un délai manifestement intenable, ou sans les informations nécessaires déjà en possession d'autres personnes, suivie d'une critique sur le résultat une fois l'échéance dépassée.", script: "Pour réussir cette mission dans ce délai, j'ai besoin de [ressource ou information précise]. Sans ça, je documente dès maintenant le risque sur le résultat." },
-  { context: "famille", name: "La dette de vie (« après tout ce qu'on a sacrifié pour toi »)", principle: "Version étendue à l'échelle d'une vie entière de la culpabilisation du chapitre 8, convoque des décennies de soin réel pour rendre toute limite actuelle illégitime.", decl: "« On s'est sacrifiés pour toi pendant vingt ans, et voilà comment tu nous traites. » invoqué face à une limite ponctuelle et raisonnable.", script: "Je suis reconnaissant(e) pour ce que vous avez fait, sincèrement. Et ça ne change rien au fait que j'ai besoin de [limite précise] aujourd'hui." },
-  { context: "famille", name: "Le rôle assigné (bouc émissaire ou pacificateur)", principle: "Chaque système familial attribue souvent, tôt et durablement, un rôle fixe à chaque membre ; s'en écarter est vécu comme une menace pour l'équilibre du système entier, pas comme un choix individuel légitime.", decl: "« Tu as toujours été celui/celle qui fait des histoires. » / « C'est toujours à toi d'arranger les choses, pourquoi tu ne le fais pas cette fois ? »", script: "Ce rôle a pu être vrai à un moment, mais je ne suis pas obligé(e) de le tenir indéfiniment. Aujourd'hui, ma position est celle-ci : [position actuelle]." },
-  { context: "famille", name: "La loyauté testée par les rituels familiaux", principle: "Utiliser les fêtes, les événements ou les rites familiaux comme test de loyauté, la présence ou l'absence devient une preuve d'appartenance plutôt qu'un choix logistique ordinaire.", decl: "« Si tu ne viens pas à Noël, ça veut dire que tu ne fais plus partie de la famille. » / « Ta présence à cet événement n'est pas négociable. »", script: "Ma présence ou mon absence à un moment donné ne mesure pas mon appartenance à cette famille. Pour cette fois, ma réponse est [oui/non], et ça reste vrai indépendamment de ce que ça signifie pour vous." },
-  { context: "famille", name: "Le chantage à la génération suivante", principle: "Invoquer l'impact sur les petits-enfants ou la génération suivante pour rendre une limite actuelle plus difficile à maintenir.", decl: "« Tes enfants ne connaîtront pas leurs grands-parents à cause de toi. » / « Tu prives ta fille/ton fils de sa famille. »", script: "Les liens entre mes enfants et vous se construisent sur la base du respect envers moi aussi. Ce n'est pas moi qui les prive de quoi que ce soit." },
-  { context: "coparentalite", name: "L'enfant messager", principle: "Utiliser l'enfant pour transmettre des messages hostiles, des reproches ou des informations logistiques, plutôt que de communiquer directement entre adultes.", decl: "L'enfant rapporte : « Papa/Maman a dit que tu devais... » ou revient d'un week-end chargé d'un message clairement destiné à l'autre parent.", script: "Je ne communique pas de sujets adultes par l'intermédiaire de notre enfant. Si tu as un point à aborder, contacte-moi directement." },
-  { context: "coparentalite", name: "Le sabotage du planning", principle: "Modifier les horaires ou les échanges à la dernière minute, de façon répétée, pour déstabiliser l'organisation de l'autre parent tout en paraissant, à chaque fois, avoir une excuse valable.", decl: "Des changements récurrents annoncés à la dernière minute, chacun isolément « raisonnable », mais dont la fréquence dépasse ce que le hasard expliquerait.", script: "Le planning convenu reste la référence. Pour tout changement, j'ai besoin d'un accord écrit à l'avance, pas d'un ajustement le jour même." },
-  { context: "coparentalite", name: "L'aliénation parentale", principle: "Dévaloriser subtilement l'autre parent auprès de l'enfant, de façon répétée et cumulative, pour éroder progressivement le lien entre l'enfant et l'autre parent.", decl: "L'enfant répète des jugements négatifs sur l'autre parent avec des mots qui ne semblent pas les siens, ou exprime une réticence croissante et inexpliquée à voir l'autre parent.", script: "Auprès de l'enfant : « Papa/Maman t'aime et est content(e) de te voir. » (sans commenter ni contre-attaquer l'autre parent devant l'enfant, jamais)." },
-  { context: "coparentalite", name: "La manipulation financière liée aux enfants", principle: "Utiliser la pension alimentaire ou les dépenses liées aux enfants comme levier de pression ou de contrôle, plutôt que comme une question strictement logistique.", decl: "Des paiements conditionnés informellement à un comportement (« je paierai quand tu seras plus arrangeant(e) sur le planning ») ou des demandes de dépenses non prévues présentées comme des urgences répétées.", script: "Les questions financières concernant les enfants se traitent selon les termes convenus, indépendamment de tout autre sujet entre nous." },
-  { context: "coparentalite", name: "La surcharge procédurale", principle: "Multiplier les démarches, les demandes de justificatifs ou les procédures formelles au-delà de ce que la situation exige réellement, pour épuiser l'énergie et les ressources de l'autre parent plutôt que pour un besoin légitime d'organisation.", decl: "Des demandes répétées de documents déjà fournis, des exigences de validations multiples pour des décisions mineures, ou des relances via avocat pour des sujets qui auraient pu se régler par un message direct.", script: "Cette demande peut se traiter simplement, sans passer par une procédure formelle. Je réponds directement au sujet posé." },
-  { context: "coparentalite", name: "Le sabotage de l'accompagnement de l'enfant", principle: "S'opposer, souvent avec une intensité disproportionnée, à ce que l'enfant bénéficie d'un suivi psychologique indépendant, une résistance qui trahit rarement un désaccord éducatif sincère, et bien plus souvent la crainte de perdre un canal d'instrumentalisation ou de voir une réalité difficile à contrôler mise au jour.", decl: "Une colère disproportionnée, des refus répétés de signer une autorisation de soins, ou un dénigrement systématique du professionnel dès qu'un accompagnement pour l'enfant est évoqué.", script: "Le suivi de [enfant] n'est pas une question de tort ou de raison entre nous. C'est un espace neutre pour lui/elle, indépendamment de ce qui se passe entre ses parents." },
-  { context: "ecrit", name: "Le silence numérique calculé (« laissé sur lu »)", principle: "Laisser un message visiblement lu (accusé de lecture) sans répondre, pendant une durée choisie pour maximiser l'inconfort de l'autre, une version numérique du silence punitif du chapitre 10, rendue plus visible et plus mesurable par la technologie.", decl: "Un message reste marqué « lu » pendant des heures ou des jours, sans réponse, suivi éventuellement d'une reprise de contact anodine comme si de rien n'était.", script: "Je vois que tu as vu mon message. Je n'ai pas besoin d'une réponse immédiate, mais dis-moi quand je peux compter en avoir une." },
-  { context: "ecrit", name: "Le screenshot sorti de son contexte", principle: "Capturer et partager un message isolé, sans l'échange complet qui l'entoure, pour lui faire dire quelque chose que le contexte réel contredisait.", decl: "Découvrir qu'un message a été partagé à un tiers (ami commun, famille, réseaux sociaux) sans les messages précédents ou suivants qui en changeaient le sens.", script: "Ce message a été partagé sans le reste de la conversation, ce qui en change le sens. Voici l'échange complet." },
-  { context: "ecrit", name: "L'escalade en groupe", principle: "Lancer une attaque, une accusation ou une humiliation dans un chat de groupe plutôt qu'en message privé, pour mobiliser un public et rendre la réponse plus difficile.", decl: "Une critique ou une accusation adressée directement dans un groupe familial, amical ou professionnel, plutôt qu'en privé, alors que le sujet ne concernait que deux personnes.", script: "Je préfère qu'on discute de ça en privé, je t'écris directement." },
-  { context: "ecrit", name: "La surveillance déguisée en attention", principle: "Exiger un accès au téléphone, au partage de localisation en continu, ou aux mots de passe, sous couvert de preuve d'amour, de confiance ou d'inquiétude légitime.", decl: "« Si tu n'as rien à cacher, partage ta position en permanence. » / « Une relation de confiance, ça veut dire un accès total au téléphone de l'autre. »", script: "La confiance ne se mesure pas à l'accès total à ma vie privée. Je peux répondre à une inquiétude précise sans donner un accès permanent." },
-];
-
-function ContextScreen({ onBack, context, setContext }) {
-  const [expanded, setExpanded] = useState(null);
-
-  if (!context) {
-    return (
-      <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-        <button onClick={onBack} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Retour</button>
-        <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2.5, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>Partie 5</span>
-        <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 24, color: T.ink, margin: "6px 0 6px" }}>Dans quel contexte ?</h1>
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5, marginBottom: 20 }}>
-          Choisissez le terrain qui vous concerne en ce moment. Seules les fiches pertinentes s'affichent, plutôt que de tout parcourir.
-        </p>
-        {CONTEXTS.map((c) => {
-          const count = CONTEXT_ITEMS.filter((it) => it.context === c.id).length;
-          return (
-            <button key={c.id} onClick={() => setContext(c.id)} className="dojo-press-bouncy" style={{ display: "block", width: "100%", textAlign: "left", background: T.card, border: "none", borderRadius: 18, padding: "16px 18px", marginBottom: 12, cursor: "pointer", boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 16, color: T.ink }}>{c.label}</div>
-                <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, color: T.muted, border: "1px solid #E2E6E3", borderRadius: 20, padding: "3px 9px" }}>{count} fiches</span>
-              </div>
-              <div style={{ fontFamily: "'Montserrat'", fontSize: 11.5, color: T.muted, marginTop: 3 }}>Livre, {c.chapter}</div>
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
-  const ctxMeta = CONTEXTS.find((c) => c.id === context);
-  const items = CONTEXT_ITEMS.filter((it) => it.context === context);
-
-  return (
-    <div style={{ minHeight: "100%", padding: "20px 22px 34px" }}>
-      <button onClick={() => setContext(null)} className="dojo-press" style={{ display: "block", background: "none", border: "none", color: T.muted, fontFamily: "'Montserrat'", fontSize: 14, cursor: "pointer", marginBottom: 10, padding: "6px 0" }}>← Changer de contexte</button>
-
-      <span style={{ fontFamily: "'Montserrat'", fontSize: 11, letterSpacing: 2, color: T.teal, textTransform: "uppercase", fontWeight: 500 }}>{ctxMeta.chapter}</span>
-      <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 23, color: T.ink, margin: "6px 0 18px" }}>{ctxMeta.label}</h1>
-
-      {items.map((it, i) => {
-        const isOpen = expanded === i;
-        return (
-          <div key={i} style={{ background: T.card, borderRadius: 16, marginBottom: 10, boxShadow: "0 2px 10px rgba(35,40,35,0.05)", overflow: "hidden" }}>
-            <button onClick={() => setExpanded(isOpen ? null : i)} className="dojo-press" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "15px 16px", cursor: "pointer" }}>
-              <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 14.5, color: T.ink }}>{it.name}</div>
-              {!isOpen && <div style={{ fontFamily: "'Montserrat'", fontSize: 11.5, color: T.muted, marginTop: 3 }}>Toucher pour voir le script</div>}
-            </button>
-            {isOpen && (
-              <div style={{ padding: "0 16px 16px" }}>
-                <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginBottom: 4 }}>On vous dit</div>
-                <div style={{ fontFamily: "'Montserrat'", fontStyle: "italic", fontSize: 13, color: T.ink, lineHeight: 1.45, marginBottom: 10 }}>{it.decl}</div>
-                <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginBottom: 4 }}>Le script</div>
-                <div style={{ fontFamily: "'Montserrat'", fontWeight: 500, fontSize: 13, color: T.teal, lineHeight: 1.45 }}>{it.script}</div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ---------------- Diagrammes interactifs (chapitres 1 et 12, texte vérbatim du livre) ---------------- */
 const TRIANGLE_POINTS = [
@@ -1469,7 +1141,7 @@ function AboutScreen({ onBack, onShowAvertissement }) {
       <h1 style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 23, color: T.ink, margin: "6px 0 20px" }}>À propos</h1>
 
       <div style={{ background: T.card, borderRadius: 18, padding: 20, marginBottom: 14, boxShadow: "0 2px 14px rgba(35,40,35,0.06)" }}>
-        <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.ink, lineHeight: 1.55, marginBottom: 10 }}>
+        <p style={{ fontFamily: "'Montserrat'", fontSize: 13.5, color: T.ink, lineHeight: 1.55, marginBottom: 10, textAlign: "justify" }}>
           Cette application est le compagnon d'entraînement du livre <em>L'Aïkido Psychologique — Le guide de terrain contre les manipulateurs</em>.
         </p>
         <p style={{ fontFamily: "'Montserrat'", fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
@@ -1486,7 +1158,7 @@ function AboutScreen({ onBack, onShowAvertissement }) {
 }
 
 /* ---------------- Home screen ---------------- */
-function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal, incidentCount, onOpenMirrors, onOpenQuiz, onOpenFourF, onOpenSimulator, dueCount, onOpenContext, onOpenDiagrams, onOpenAbout }) {
+function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenMirrors, onOpenQuiz, onOpenFourF, dueCount, onOpenDiagrams, onOpenAbout }) {
   const { current, next, idx } = beltForScore(score);
   const targetProgress = next ? Math.min(1, (score - current.threshold) / (next.threshold - current.threshold)) : 1;
   const [barWidth, setBarWidth] = useState(0);
@@ -1555,26 +1227,6 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
         </button>
       </Stagger>
 
-      {/* Journal d'incidents — now active */}
-      <Stagger index={3}>
-        <button
-          onClick={onOpenJournal}
-          className="dojo-press-bouncy"
-          style={{
-            width: "100%", textAlign: "left", background: T.card, border: "none", borderRadius: 18,
-            padding: "16px 20px", marginBottom: 12, cursor: "pointer", boxShadow: "0 2px 14px rgba(35,40,35,0.06)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 15, color: T.ink }}>Journal d'incidents</div>
-            {incidentCount > 0 && (
-              <span style={{ fontFamily: "'IBM Plex Mono'", fontSize: 10, color: T.teal, border: `1px solid ${T.teal}`, borderRadius: 20, padding: "3px 9px" }}>{incidentCount}</span>
-            )}
-          </div>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 3 }}>Repérer la règle des 3 occurrences, sans y penser</div>
-        </button>
-      </Stagger>
-
       {/* Test des 6 miroirs — now active */}
       <Stagger index={4}>
         <button
@@ -1622,36 +1274,6 @@ function HomeScreen({ score, addScore, onOpenGrounding, onOpenSOS, onOpenJournal
         >
           <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 15, color: T.ink }}>Test des 4F</div>
           <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 3 }}>Combattre, fuir, geler ou plaire : votre réflexe dominant</div>
-        </button>
-      </Stagger>
-
-      {/* Simulateur à embranchement — now active */}
-      <Stagger index={7}>
-        <button
-          onClick={onOpenSimulator}
-          className="dojo-press-bouncy"
-          style={{
-            width: "100%", textAlign: "left", background: T.card, border: "none", borderRadius: 18,
-            padding: "16px 20px", marginBottom: 12, cursor: "pointer", boxShadow: "0 2px 14px rgba(35,40,35,0.06)",
-          }}
-        >
-          <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 15, color: T.ink }}>Simulateur de scène</div>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 3 }}>Construire sa réponse, voir la conversation changer</div>
-        </button>
-      </Stagger>
-
-      {/* Mode contextuel — now active */}
-      <Stagger index={8}>
-        <button
-          onClick={onOpenContext}
-          className="dojo-press-bouncy"
-          style={{
-            width: "100%", textAlign: "left", background: T.card, border: "none", borderRadius: 18,
-            padding: "16px 20px", marginBottom: 12, cursor: "pointer", boxShadow: "0 2px 14px rgba(35,40,35,0.06)",
-          }}
-        >
-          <div style={{ fontFamily: "'Playfair Display'", fontWeight: 600, fontSize: 15, color: T.ink }}>Par contexte</div>
-          <div style={{ fontFamily: "'Montserrat'", fontSize: 12, color: T.muted, marginTop: 3 }}>Travail, famille, coparentalité, écrit : fiches ciblées</div>
         </button>
       </Stagger>
 
@@ -1717,14 +1339,13 @@ function SplashScreen({ onStart }) {
 /* ---------------- App shell ---------------- */
 export default function DojoApp() {
   const { score, addScore, seenAvertissement, markAvertissementSeen, loaded } = useDojoState();
-  const { incidents, addIncident, removeIncident, loaded: incidentsLoaded } = useIncidents();
   const { recordAnswer, isDue, loaded: srsLoaded } = useSpacedRepetition();
+  const { scored, markScoredOnce, loaded: scoredLoaded } = useScoredQuestions();
   const [screen, setScreen] = useState("splash");
-  const [context, setContext] = useState(null);
   const [sosOpen, setSosOpen] = useState(false);
   const [forceAvertissement, setForceAvertissement] = useState(false);
 
-  if (!loaded || !incidentsLoaded || !srsLoaded) return null;
+  if (!loaded || !srsLoaded || !scoredLoaded) return null;
 
   return (
     <div style={{ minHeight: "100dvh", background: T.bg, position: "relative" }}>
@@ -1790,14 +1411,10 @@ export default function DojoApp() {
               addScore={addScore}
               onOpenGrounding={() => setScreen("grounding")}
               onOpenSOS={() => setSosOpen(true)}
-              onOpenJournal={() => setScreen("journal")}
-              incidentCount={incidents.length}
               onOpenMirrors={() => setScreen("mirrors")}
               onOpenQuiz={() => setScreen("quiz")}
               onOpenFourF={() => setScreen("fourf")}
-              onOpenSimulator={() => setScreen("simulator")}
               dueCount={QUIZ_QUESTIONS.filter((q) => isDue(q.name)).length}
-              onOpenContext={() => setScreen("context")}
               onOpenDiagrams={() => setScreen("diagrams")}
               onOpenAbout={() => setScreen("about")}
             />
@@ -1811,16 +1428,6 @@ export default function DojoApp() {
             />
           </div>
         )}
-        {screen === "journal" && (
-          <div key="journal" className="dojo-screen">
-            <JournalScreen
-              onBack={() => setScreen("home")}
-              incidents={incidents}
-              addIncident={addIncident}
-              removeIncident={removeIncident}
-            />
-          </div>
-        )}
         {screen === "mirrors" && (
           <div key="mirrors" className="dojo-screen">
             <MirrorTestScreen onBack={() => setScreen("home")} />
@@ -1828,22 +1435,12 @@ export default function DojoApp() {
         )}
         {screen === "quiz" && (
           <div key="quiz" className="dojo-screen">
-            <QuizScreen onBack={() => setScreen("home")} recordAnswer={recordAnswer} isDue={isDue} />
+            <QuizScreen onBack={() => setScreen("home")} recordAnswer={recordAnswer} isDue={isDue} addScore={addScore} scored={scored} markScoredOnce={markScoredOnce} />
           </div>
         )}
         {screen === "fourf" && (
           <div key="fourf" className="dojo-screen">
             <FourFTestScreen onBack={() => setScreen("home")} />
-          </div>
-        )}
-        {screen === "simulator" && (
-          <div key="simulator" className="dojo-screen">
-            <SimulatorScreen onBack={() => setScreen("home")} />
-          </div>
-        )}
-        {screen === "context" && (
-          <div key="context" className="dojo-screen">
-            <ContextScreen onBack={() => { setScreen("home"); setContext(null); }} context={context} setContext={setContext} />
           </div>
         )}
         {screen === "diagrams" && (
